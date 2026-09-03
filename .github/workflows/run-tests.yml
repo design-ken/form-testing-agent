@@ -1,0 +1,44 @@
+name: Lead Form Tester
+
+on:
+  schedule:
+    - cron: '30 2,12 * * *'   # 8:00 AM and 6:00 PM IST
+  workflow_dispatch: {}        # lets you trigger it manually from GitHub's UI too
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium (with retry)
+        run: |
+          for attempt in 1 2 3; do
+            npx playwright install --with-deps chromium && break
+            echo "Attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+
+      - run: npm run test:forms
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-${{ github.run_id }}
+          path: screenshots/
+          retention-days: 90
+          if-no-files-found: ignore
