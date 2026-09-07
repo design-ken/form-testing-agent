@@ -1,6 +1,7 @@
 import type { Page } from 'playwright';
 import type { TestResult, FormDef, Device } from '../types.js';
 import { CONSENT_BANNER_SELECTORS } from '../forms.js';
+import { findSubmitButton } from './submitButton.js';
 
 interface LayoutCheckContext {
   page: Page;
@@ -76,7 +77,7 @@ export async function runLayoutChecks(ctx: LayoutCheckContext): Promise<TestResu
 
   // 2. Submit button is fully visible within the viewport (not cut off).
   try {
-    const submitButton = page.getByRole('button', { name: /submit|send|book|request|talk/i }).first();
+    const submitButton = await findSubmitButton(page);
     const exists = await submitButton.count();
     if (exists > 0) {
       const box = await submitButton.boundingBox();
@@ -123,7 +124,7 @@ export async function runLayoutChecks(ctx: LayoutCheckContext): Promise<TestResu
   // 3. Touch target size on tablet/mobile (WCAG-adjacent: 44x44px minimum).
   if (device === 'tablet' || device === 'mobile') {
     try {
-      const submitButton = page.getByRole('button', { name: /submit|send|book|request|talk/i }).first();
+      const submitButton = await findSubmitButton(page);
       const box = await submitButton.boundingBox();
       if (box) {
         const tooSmall = box.width < 44 || box.height < 44;
@@ -154,7 +155,7 @@ export async function runLayoutChecks(ctx: LayoutCheckContext): Promise<TestResu
   // real virtual keyboard behavior isn't simulable in headless Chromium).
   if (device === 'mobile') {
     try {
-      const submitButton = page.getByRole('button', { name: /submit|send|book|request|talk/i }).first();
+      const submitButton = await findSubmitButton(page);
       const box = await submitButton.boundingBox();
       const viewport = page.viewportSize();
       if (box && viewport) {

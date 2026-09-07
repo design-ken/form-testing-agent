@@ -6,14 +6,14 @@ import { FORMS, VIEWPORTS } from './forms.js';
 import { runFunctionalChecks } from './checks/functional.js';
 import { runLayoutChecks, dismissConsentBanner } from './checks/layout.js';
 import { runAccessibilityChecks } from './checks/accessibility.js';
-import { insertResults, closePool } from './db.js';
+import { insertResults, closeDb } from './db.js';
 import { writeAllResults } from './notion.js';
 import { sendReport } from './email.js';
 import { notifyBuzz } from './buzz.js';
 import type { TestResult, RunSummary } from './types.js';
 
 const REQUIRED_ENV_VARS = ['RESEND_API_KEY', 'EMAIL_RECIPIENTS'];
-const RECOMMENDED_ENV_VARS = ['DATABASE_URL', 'NOTION_TOKEN', 'NOTION_DATABASE_ID'];
+const RECOMMENDED_ENV_VARS = ['NOTION_TOKEN', 'NOTION_DATABASE_ID'];
 const SCREENSHOT_DIR = path.resolve(process.cwd(), 'screenshots');
 const OVERALL_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes, per the plan's hard timeout mitigation
 
@@ -27,7 +27,7 @@ function validateEnv(): void {
   const missingRecommended = RECOMMENDED_ENV_VARS.filter((v) => !process.env[v]);
   if (missingRecommended.length > 0) {
     console.warn(
-      `[run] Warning: missing recommended env var(s): ${missingRecommended.join(', ')} — DB/Notion writes will be skipped or fail for this run.`
+      `[run] Warning: missing recommended env var(s): ${missingRecommended.join(', ')} — Notion writes will be skipped or fail for this run.`
     );
   }
 }
@@ -137,7 +137,7 @@ async function runAllTests(): Promise<RunSummary> {
     }
   }
 
-  const dbOutcome = await insertResults(allResults);
+  const dbOutcome = insertResults(allResults);
   const notionOutcome = await writeAllResults(allResults);
 
   const summary: RunSummary = {
@@ -193,7 +193,7 @@ async function main(): Promise<void> {
   }
 
   await notifyBuzz(summary).catch((err) => console.error('[run] BUZZ stub notify failed:', err.message));
-  await closePool().catch(() => {});
+  closeDb();
 
   if (summary.runFailed) {
     process.exitCode = 1;

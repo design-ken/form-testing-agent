@@ -1,6 +1,7 @@
 import type { Page } from 'playwright';
 import type { TestResult, FormDef, Device } from '../types.js';
 import { TEST_IDENTITY } from '../forms.js';
+import { findSubmitButton } from './submitButton.js';
 
 const NAV_TIMEOUT_MS = 15000;
 const ACTION_TIMEOUT_MS = 5000;
@@ -113,7 +114,7 @@ export async function runFunctionalChecks(ctx: FunctionalCheckContext): Promise<
 
   // 3. Required-field validation — attempt to submit empty, expect it to be blocked.
   try {
-    const submitButton = page.getByRole('button', { name: /submit|send|book|request|talk/i }).first();
+    const submitButton = await findSubmitButton(page);
     const submitVisible = await submitButton.isVisible({ timeout: ACTION_TIMEOUT_MS }).catch(() => false);
 
     if (submitVisible) {
@@ -167,7 +168,7 @@ export async function runFunctionalChecks(ctx: FunctionalCheckContext): Promise<
     await fillKnownFields(page);
 
     const urlBefore = page.url();
-    const submitButton = page.getByRole('button', { name: /submit|send|book|request|talk/i }).first();
+    const submitButton = await findSubmitButton(page);
     const submitExists = await submitButton.count();
 
     if (submitExists === 0) {

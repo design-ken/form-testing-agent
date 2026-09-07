@@ -1,5 +1,5 @@
 import { Resend } from 'resend';
-import { getLatestRunTimestamp, closePool } from './db.js';
+import { getLatestRunTimestamp, closeDb } from './db.js';
 
 const STALE_THRESHOLD_HOURS = 20;
 
@@ -37,7 +37,7 @@ async function sendWarningEmail(reason: string): Promise<void> {
 
 async function main(): Promise<void> {
   try {
-    const latest = await getLatestRunTimestamp();
+    const latest = getLatestRunTimestamp();
 
     if (!latest) {
       console.warn('[watchdog] No test_runs rows found at all — sending warning.');
@@ -56,7 +56,7 @@ async function main(): Promise<void> {
       console.log(`[watchdog] OK — last run was ${hoursSinceLastRun.toFixed(1)}h ago. No action needed.`);
     }
   } finally {
-    await closePool().catch(() => {});
+    closeDb();
   }
 }
 

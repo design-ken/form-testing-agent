@@ -1,84 +1,72 @@
-import pg from 'pg';
+import Database from 'better-sqlite3';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { TestResult } from './types.js';
 
-const { Pool } = pg;
+// The DB is a file committed to the repo (db/test-runs.sqlite), not a
+// hosted service — the GitHub Actions workflow commits it back after each
+// run so history persists across runs without a third-party DB account.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DB_PATH = path.resolve(__dirname, '..', 'db', 'test-runs.sqlite');
 
-let pool: pg.Pool | null = null;
+let db: Database.Database | null = null;
 
-function getPool(): pg.Pool {
-  if (!pool) {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      throw new Error('DATABASE_URL is not set.');
-    }
-    pool = new Pool({ connectionString, ssl: { rejectUnauthorized: true } });
+function getDb(): Database.Database {
+  if (!db) {
+    db = new Database(DB_PATH);
+    // Plain rollback-journal mode (the default), not WAL — this file is
+    // committed to git as a single artifact after each short-lived Action
+    // run, and WAL's separate -wal/-shm sidecar files would either need
+    // committing too (messy) or risk losing uncheckpointed writes if
+    // ignored. A single process doing one transaction has no need for WAL's
+    // concurrent-reader benefit anyway.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS test_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        run_timestamp TEXT NOT NULL,
+        form_url TEXT NOT NULL,
+        form_name TEXT NOT NULL,
+        device TEXT NOT NULL,
+        category TEXT NOT NULL,
+        status TEXT NOT NULL,
+        severity TEXT,
+        description TEXT,
+        screenshot_path TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_test_runs_run_id ON test_runs (run_id);
+      CREATE INDEX IF NOT EXISTS idx_test_runs_run_timestamp ON test_runs (run_timestamp DESC);
+    `);
   }
-  return pool;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return db;
 }
 
 /**
- * Inserts all result rows for a run. Retries once after a 3-second delay to
- * cover Neon's free-tier cold-start suspend/wake behavior. Never throws —
- * caller (run.ts) treats a DB failure as non-fatal so email/Notion can still
- * proceed, per the plan's "don't block alerting on DB success" mitigation.
+ * Inserts all result rows for a run inside a single transaction. Local
+ * SQLite has no network/cold-start to retry against, so unlike the old
+ * Postgres version this either succeeds outright or fails once — no retry
+ * loop. Never throws — caller (run.ts) treats a DB failure as non-fatal so
+ * email/Notion can still proceed.
  */
-export async function insertResults(results: TestResult[]): Promise<{ ok: boolean; error?: string }> {
-  const attempt = async (): Promise<void> => {
-    const client = await getPool().connect();
-    try {
-      await client.query('BEGIN');
-      for (const r of results) {
-        await client.query(
-          `INSERT INTO test_runs
-            (run_id, run_timestamp, form_url, form_name, device, category, status, severity, description, screenshot_path)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [
-            r.runId,
-            r.runTimestamp,
-            r.formUrl,
-            r.formName,
-            r.device,
-            r.category,
-            r.status,
-            r.severity,
-            r.description,
-            r.screenshotPath,
-          ]
-        );
-      }
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw err;
-    } finally {
-      client.release();
-    }
-  };
+export function insertResults(results: TestResult[]): { ok: boolean; error?: string } {
+  const insert = getDb().prepare(`
+    INSERT INTO test_runs
+      (run_id, run_timestamp, form_url, form_name, device, category, status, severity, description, screenshot_path)
+    VALUES (@runId, @runTimestamp, @formUrl, @formName, @device, @category, @status, @severity, @description, @screenshotPath)
+  `);
 
-  const describeError = (err: unknown): string => {
-    if (err instanceof Error && err.message) return err.message;
-    const code = (err as { code?: string })?.code;
-    return code ? `Error with code ${code} (no message)` : String(err);
-  };
+  const insertMany = getDb().transaction((rows: TestResult[]) => {
+    for (const r of rows) insert.run(r);
+  });
 
   try {
-    await attempt();
+    insertMany(results);
     return { ok: true };
-  } catch (firstErr) {
-    console.error('[db] First insert attempt failed, retrying in 3s:', describeError(firstErr));
-    await sleep(3000);
-    try {
-      await attempt();
-      return { ok: true };
-    } catch (secondErr) {
-      const message = describeError(secondErr);
-      console.error('[db] Retry also failed:', message);
-      return { ok: false, error: message };
-    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[db] Insert failed:', message);
+    return { ok: false, error: message };
   }
 }
 
@@ -86,20 +74,16 @@ export async function insertResults(results: TestResult[]): Promise<{ ok: boolea
  * Returns the most recent run_timestamp across all rows, or null if the
  * table is empty. Used by the watchdog to detect a silently-skipped cron run.
  */
-export async function getLatestRunTimestamp(): Promise<Date | null> {
-  const client = await getPool().connect();
-  try {
-    const res = await client.query('SELECT MAX(run_timestamp) AS latest FROM test_runs');
-    const latest = res.rows[0]?.latest;
-    return latest ? new Date(latest) : null;
-  } finally {
-    client.release();
-  }
+export function getLatestRunTimestamp(): Date | null {
+  const row = getDb().prepare('SELECT MAX(run_timestamp) AS latest FROM test_runs').get() as
+    | { latest: string | null }
+    | undefined;
+  return row?.latest ? new Date(row.latest) : null;
 }
 
-export async function closePool(): Promise<void> {
-  if (pool) {
-    await pool.end();
-    pool = null;
+export function closeDb(): void {
+  if (db) {
+    db.close();
+    db = null;
   }
 }

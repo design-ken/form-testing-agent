@@ -9,6 +9,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write   # needed to commit the updated sqlite file back
     steps:
       - uses: actions/checkout@v4
 
@@ -28,7 +30,6 @@ jobs:
 
       - run: npm run test:forms
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -42,3 +43,16 @@ jobs:
           path: screenshots/
           retention-days: 90
           if-no-files-found: ignore
+
+      # The SQLite file is the durable result store (see src/db.ts) — commit
+      # it back to the repo so history persists across runs. Runs even if
+      # the test step failed/errored, since insertResults() still writes
+      # whatever rows it collected before any failure.
+      - name: Commit updated test results database
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add db/test-runs.sqlite
+          git diff --cached --quiet db/test-runs.sqlite || git commit -m "Update test-runs.sqlite [skip ci]"
+          git push

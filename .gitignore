@@ -5,3 +5,10 @@ screenshots/
 dist/
 *.log
 .DS_Store
+
+# db/test-runs.sqlite itself IS tracked and committed by the GitHub Actions
+# workflow after each run — it's the durable store, not a build artifact.
+# Only its transient journal/lock sidecar files are ignored.
+db/*.sqlite-journal
+db/*.sqlite-wal
+db/*.sqlite-shm
