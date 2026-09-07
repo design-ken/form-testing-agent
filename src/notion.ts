@@ -14,19 +14,40 @@ function getClient(): Client {
   return client;
 }
 
+// Notion's 2025-09-03 API split each database into one or more "data
+// sources" — writes now target a data_source_id, not the database_id
+// directly (confirmed live: the old database_id-as-parent call fails).
+// We resolve NOTION_DATABASE_ID -> its first data source once per process
+// and cache it, so the env var setup stays a single ID like before.
+let cachedDataSourceId: string | null = null;
+
+async function getDataSourceId(): Promise<string> {
+  if (cachedDataSourceId) return cachedDataSourceId;
+
+  const databaseId = process.env.NOTION_DATABASE_ID;
+  if (!databaseId) {
+    throw new Error('NOTION_DATABASE_ID is not set.');
+  }
+
+  const db = await getClient().databases.retrieve({ database_id: databaseId });
+  const dataSources = (db as { data_sources?: Array<{ id: string }> }).data_sources;
+  if (!dataSources || dataSources.length === 0) {
+    throw new Error(`Database ${databaseId} has no data sources.`);
+  }
+
+  cachedDataSourceId = dataSources[0].id;
+  return cachedDataSourceId;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * FIELD MAPPING — EDIT THIS TO MATCH YOUR ACTUAL NOTION DATABASE.
- *
- * These property names are assumed based on the Track B spec (URL/component,
- * device, category, severity, description, screenshot, status, date/time,
- * test-type). Your existing database (ID confirmed as
- * 3d0369df402080758409f3e680b4bb59) may use different exact names/casing —
- * open the database in Notion, check each column header, and update the
- * strings on the right-hand side below to match exactly (Notion property
+ * These property names match the columns created directly in the "Testing
+ * agent log" database (ID 3d0369df402080758409f3e680b4bb59) via the Notion
+ * API during setup — verified live, not assumed. If columns are ever
+ * renamed in Notion, update the strings on the right to match (property
  * names are case-sensitive and must match exactly or the write will fail).
  */
 const FIELD_NAMES = {
@@ -68,14 +89,10 @@ function buildProperties(r: TestResult): Record<string, unknown> {
  * "don't block email on Notion success" mitigation.
  */
 async function writeRow(r: TestResult): Promise<{ ok: boolean; error?: string }> {
-  const databaseId = process.env.NOTION_DATABASE_ID;
-  if (!databaseId) {
-    return { ok: false, error: 'NOTION_DATABASE_ID is not set.' };
-  }
-
   const attempt = async () => {
+    const dataSourceId = await getDataSourceId();
     await getClient().pages.create({
-      parent: { database_id: databaseId },
+      parent: { data_source_id: dataSourceId },
       properties: buildProperties(r) as never,
     });
   };
