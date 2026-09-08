@@ -44,12 +44,19 @@ jobs:
       # The SQLite file is the durable result store (see src/db.ts) — commit
       # it back to the repo so history persists across runs. Runs even if
       # the test step failed/errored, since insertResults() still writes
-      # whatever rows it collected before any failure.
+      # whatever rows it collected before any failure. Guarded with an
+      # existence check: if the process crashed hard (e.g. segfault) before
+      # ever reaching insertResults(), the file may not exist yet — `git add`
+      # on a nonexistent path fails the whole step otherwise (confirmed live).
       - name: Commit updated test results database
         if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add db/test-runs.sqlite
-          git diff --cached --quiet db/test-runs.sqlite || git commit -m "Update test-runs.sqlite [skip ci]"
-          git push
+          if [ -f db/test-runs.sqlite ]; then
+            git add db/test-runs.sqlite
+            git diff --cached --quiet db/test-runs.sqlite || git commit -m "Update test-runs.sqlite [skip ci]"
+            git push
+          else
+            echo "db/test-runs.sqlite does not exist — test:forms likely crashed before writing any results. Nothing to commit."
+          fi
