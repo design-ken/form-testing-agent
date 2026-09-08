@@ -8,27 +8,17 @@ import { runLayoutChecks, dismissConsentBanner } from './checks/layout.js';
 import { runAccessibilityChecks } from './checks/accessibility.js';
 import { insertResults, closeDb } from './db.js';
 import { writeAllResults } from './notion.js';
-import { sendReport } from './email.js';
 import { notifyBuzz } from './buzz.js';
 import type { TestResult, RunSummary } from './types.js';
 
-const REQUIRED_ENV_VARS = ['RESEND_API_KEY', 'EMAIL_RECIPIENTS'];
-const RECOMMENDED_ENV_VARS = ['NOTION_TOKEN', 'NOTION_DATABASE_ID'];
+const REQUIRED_ENV_VARS = ['NOTION_TOKEN', 'NOTION_DATABASE_ID'];
 const SCREENSHOT_DIR = path.resolve(process.cwd(), 'screenshots');
 const OVERALL_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes, per the plan's hard timeout mitigation
 
 function validateEnv(): void {
   const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
   if (missing.length > 0) {
-    throw new Error(
-      `Missing required environment variable(s): ${missing.join(', ')}. Cannot send alerts without these.`
-    );
-  }
-  const missingRecommended = RECOMMENDED_ENV_VARS.filter((v) => !process.env[v]);
-  if (missingRecommended.length > 0) {
-    console.warn(
-      `[run] Warning: missing recommended env var(s): ${missingRecommended.join(', ')} — Notion writes will be skipped or fail for this run.`
-    );
+    throw new Error(`Missing required environment variable(s): ${missing.join(', ')}. Cannot log results without these.`);
   }
 }
 
@@ -168,8 +158,9 @@ async function main(): Promise<void> {
       ),
     ]);
   } catch (err) {
-    // Total run failure — still send a degraded alert email, per the plan's
-    // "silence never means everything's fine" guarantee.
+    // Total run failure (e.g. site down, Chromium crash, timeout). No
+    // results to log anywhere in this case — the non-zero exit code below
+    // and GitHub's own workflow-failure notification are the only signal.
     summary = {
       runId: uuidv4(),
       runTimestamp: new Date().toISOString(),
@@ -183,18 +174,20 @@ async function main(): Promise<void> {
     };
   }
 
-  try {
-    await sendReport(summary);
-    console.log('[run] Report email sent successfully.');
-  } catch (err) {
-    console.error('[run] FAILED TO SEND REPORT EMAIL:', (err as Error).message);
-    // No further fallback channel exists in v1 — this is the one accepted
-    // silent-failure gap per the plan's Open Questions decision.
+  console.log(
+    `[run] Done — ${summary.totalPass} passed, ${summary.totalFail} failed, ${summary.totalAtRisk} at risk, ${summary.totalError} errored.`
+  );
+  if (summary.notionWriteFailed) {
+    console.error('[run] WARNING: one or more Notion writes failed — results may be incomplete in Notion for this run.');
   }
 
   await notifyBuzz(summary).catch((err) => console.error('[run] BUZZ stub notify failed:', err.message));
   closeDb();
 
+  // No email/alert channel in v1 (deferred until BUZZ exists, per plan) — a
+  // non-zero exit code is the only failure signal now. GitHub Actions emails
+  // repo watchers on scheduled-workflow failure by default, which is the
+  // free fallback this relies on until real alerting is wired up.
   if (summary.runFailed) {
     process.exitCode = 1;
   }

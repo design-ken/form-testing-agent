@@ -1,12 +1,11 @@
 {
   "name": "form-testing-agent",
   "version": "1.0.0",
-  "description": "Lead Form Tester agent for Ken Research — twice-daily Playwright checks on revenue-critical forms, reporting to a repo-committed SQLite database, Notion, and email.",
+  "description": "Lead Form Tester agent for Ken Research — twice-daily Playwright checks on revenue-critical forms, reporting to a repo-committed SQLite database and Notion.",
   "type": "module",
   "main": "src/run.ts",
   "scripts": {
     "test:forms": "tsx src/run.ts",
-    "watchdog": "tsx src/watchdog.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
@@ -17,7 +16,6 @@
     "@notionhq/client": "^5.26.0",
     "better-sqlite3": "^13.0.3",
     "playwright": "1.55.1",
-    "resend": "^6.25.0",
     "uuid": "^14.0.2"
   },
   "devDependencies": {
