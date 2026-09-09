@@ -1,5 +1,5 @@
 import { Client } from '@notionhq/client';
-import type { TestResult } from './types.js';
+import type { RunSummary, TestResult, Device } from './types.js';
 
 let client: Client | null = null;
 
@@ -44,57 +44,178 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * These property names match the columns created directly in the "Testing
- * agent log" database (ID 3d0369df402080758409f3e680b4bb59) via the Notion
- * API during setup — verified live, not assumed. If columns are ever
- * renamed in Notion, update the strings on the right to match (property
- * names are case-sensitive and must match exactly or the write will fail).
+ * One page per run (not one row per check) — these are the page-level
+ * properties, visible as columns in the Notion database view. Per-check
+ * detail (all 4 forms x 3 devices) lives in the page's block content
+ * instead (see buildPageContent), keeping the database view itself scannable.
  */
 const FIELD_NAMES = {
-  title: 'Name', // Notion databases require exactly one "title" property — update to your DB's title column name
-  url: 'URL',
-  device: 'Device',
-  category: 'Category',
-  severity: 'Severity',
+  title: 'Name',
   status: 'Status',
-  description: 'Description',
-  screenshotPath: 'Screenshot',
+  passed: 'Passed',
+  failed: 'Failed',
+  atRisk: 'At Risk',
+  errored: 'Errored',
   testType: 'Test Type',
   dateTime: 'Date',
 };
 
 const TEST_TYPE_VALUE = 'Lead Form';
+const STATUS_ICON: Record<TestResult['status'], string> = {
+  pass: '✅',
+  fail: '🚩',
+  at_risk: '⚠️',
+  error: '❌',
+};
 
-function buildProperties(r: TestResult): Record<string, unknown> {
+function overallStatus(summary: RunSummary): string {
+  if (summary.runFailed) return 'Run Failed';
+  if (summary.totalFail > 0 || summary.totalError > 0 || summary.totalAtRisk > 0) return 'Issues Found';
+  return 'All Passed';
+}
+
+function buildTitle(summary: RunSummary): string {
+  const date = new Date(summary.runTimestamp);
+  const formatted = date.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+  return `Lead Form Tester — ${formatted}`;
+}
+
+function buildProperties(summary: RunSummary): Record<string, unknown> {
   return {
     [FIELD_NAMES.title]: {
-      title: [{ text: { content: `${r.formName} — ${r.device} — ${r.category}` } }],
+      title: [{ text: { content: buildTitle(summary) } }],
     },
-    [FIELD_NAMES.url]: { url: r.formUrl },
-    [FIELD_NAMES.device]: { select: { name: r.device } },
-    [FIELD_NAMES.category]: { select: { name: r.category } },
-    [FIELD_NAMES.severity]: r.severity ? { select: { name: r.severity } } : { select: null },
-    [FIELD_NAMES.status]: { select: { name: r.status } },
-    [FIELD_NAMES.description]: {
-      rich_text: [{ text: { content: r.description.slice(0, 2000) } }],
-    },
+    [FIELD_NAMES.status]: { select: { name: overallStatus(summary) } },
+    [FIELD_NAMES.passed]: { number: summary.totalPass },
+    [FIELD_NAMES.failed]: { number: summary.totalFail },
+    [FIELD_NAMES.atRisk]: { number: summary.totalAtRisk },
+    [FIELD_NAMES.errored]: { number: summary.totalError },
     [FIELD_NAMES.testType]: { select: { name: TEST_TYPE_VALUE } },
-    [FIELD_NAMES.dateTime]: { date: { start: r.runTimestamp } },
+    [FIELD_NAMES.dateTime]: { date: { start: summary.runTimestamp } },
+  };
+}
+
+// Notion block content has hard limits: max 100 blocks per API call, and
+// max 2000 characters per rich_text content string — both enforced live by
+// the API, not just documented. Long descriptions get truncated defensively;
+// callers batch block arrays into chunks of BLOCK_BATCH_SIZE.
+const MAX_RICH_TEXT_LENGTH = 2000;
+const BLOCK_BATCH_SIZE = 90; // stay under Notion's 100-block-per-call limit with headroom
+
+function truncate(text: string): string {
+  return text.length > MAX_RICH_TEXT_LENGTH ? text.slice(0, MAX_RICH_TEXT_LENGTH - 1) + '…' : text;
+}
+
+function heading2(text: string) {
+  return {
+    object: 'block' as const,
+    type: 'heading_2' as const,
+    heading_2: { rich_text: [{ type: 'text' as const, text: { content: truncate(text) } }] },
+  };
+}
+
+function heading3(text: string) {
+  return {
+    object: 'block' as const,
+    type: 'heading_3' as const,
+    heading_3: { rich_text: [{ type: 'text' as const, text: { content: truncate(text) } }] },
+  };
+}
+
+function bulletItem(text: string) {
+  return {
+    object: 'block' as const,
+    type: 'bulleted_list_item' as const,
+    bulleted_list_item: { rich_text: [{ type: 'text' as const, text: { content: truncate(text) } }] },
+  };
+}
+
+function paragraph(text: string) {
+  return {
+    object: 'block' as const,
+    type: 'paragraph' as const,
+    paragraph: { rich_text: [{ type: 'text' as const, text: { content: truncate(text) } }] },
   };
 }
 
 /**
- * Writes one result row to Notion, retrying once after a short delay.
- * Never throws — caller treats Notion failure as non-fatal, per the plan's
- * "don't block email on Notion success" mitigation.
+ * Builds the full report as Notion blocks: a run-level summary, then one
+ * heading per form, one sub-heading per device, and one bullet per check
+ * result — grouped so the page reads like a structured report rather than
+ * a flat dump of 138 rows.
  */
-async function writeRow(r: TestResult): Promise<{ ok: boolean; error?: string }> {
+type NotionBlock = ReturnType<typeof paragraph | typeof heading2 | typeof heading3 | typeof bulletItem>;
+
+function buildPageContent(summary: RunSummary): NotionBlock[] {
+  const blocks: NotionBlock[] = [];
+
+  blocks.push(
+    paragraph(
+      `${summary.totalPass} passed · ${summary.totalFail} failed · ${summary.totalAtRisk} at risk · ${summary.totalError} errored`
+    )
+  );
+
+  if (summary.runFailed) {
+    blocks.push(paragraph(`⚠️ Run failed to complete: ${summary.runFailureReason ?? 'unknown error'}`));
+    return blocks;
+  }
+
+  const byForm = new Map<string, TestResult[]>();
+  for (const r of summary.results) {
+    const list = byForm.get(r.formName) ?? [];
+    list.push(r);
+    byForm.set(r.formName, list);
+  }
+
+  for (const [formName, formResults] of byForm) {
+    blocks.push(heading2(formName));
+
+    const byDevice = new Map<Device, TestResult[]>();
+    for (const r of formResults) {
+      const list = byDevice.get(r.device) ?? [];
+      list.push(r);
+      byDevice.set(r.device, list);
+    }
+
+    const deviceOrder: Device[] = ['desktop', 'tablet', 'mobile'];
+    for (const device of deviceOrder) {
+      const deviceResults = byDevice.get(device);
+      if (!deviceResults) continue;
+
+      blocks.push(heading3(device.charAt(0).toUpperCase() + device.slice(1)));
+      for (const r of deviceResults) {
+        blocks.push(bulletItem(`${STATUS_ICON[r.status]} ${r.description}`));
+      }
+    }
+  }
+
+  return blocks;
+}
+
+/**
+ * Writes one page per run (not one row per check), with the full 4-forms x
+ * 3-devices breakdown as structured block content inside that page.
+ * Retries once on failure. Never throws — caller treats Notion failure as
+ * non-fatal.
+ */
+export async function writeRunSummary(summary: RunSummary): Promise<{ ok: boolean; error?: string }> {
   const attempt = async () => {
     const dataSourceId = await getDataSourceId();
-    await getClient().pages.create({
+    const page = await getClient().pages.create({
       parent: { data_source_id: dataSourceId },
-      properties: buildProperties(r) as never,
+      properties: buildProperties(summary) as never,
     });
+
+    const blocks = buildPageContent(summary);
+    for (let i = 0; i < blocks.length; i += BLOCK_BATCH_SIZE) {
+      const batch = blocks.slice(i, i + BLOCK_BATCH_SIZE);
+      await getClient().blocks.children.append({ block_id: page.id, children: batch as never });
+      if (i + BLOCK_BATCH_SIZE < blocks.length) await sleep(350); // ~3 req/sec ceiling
+    }
   };
 
   try {
@@ -112,22 +233,4 @@ async function writeRow(r: TestResult): Promise<{ ok: boolean; error?: string }>
       return { ok: false, error: message };
     }
   }
-}
-
-/**
- * Writes all result rows to Notion sequentially with a small delay between
- * each, to respect Notion's ~3 requests/second rate limit. Returns overall
- * success only if every row succeeded; partial failures are logged but do
- * not abort the batch.
- */
-export async function writeAllResults(results: TestResult[]): Promise<{ ok: boolean; failedCount: number }> {
-  let failedCount = 0;
-  for (const r of results) {
-    const outcome = await writeRow(r);
-    if (!outcome.ok) {
-      failedCount += 1;
-    }
-    await sleep(350); // ~3 req/sec ceiling
-  }
-  return { ok: failedCount === 0, failedCount };
 }

@@ -7,7 +7,7 @@ import { runFunctionalChecks } from './checks/functional.js';
 import { runLayoutChecks, dismissConsentBanner } from './checks/layout.js';
 import { runAccessibilityChecks } from './checks/accessibility.js';
 import { insertResults, closeDb } from './db.js';
-import { writeAllResults } from './notion.js';
+import { writeRunSummary } from './notion.js';
 import { notifyBuzz } from './buzz.js';
 import type { TestResult, RunSummary } from './types.js';
 
@@ -139,7 +139,6 @@ async function runAllTests(): Promise<RunSummary> {
   }
 
   const dbOutcome = insertResults(allResults);
-  const notionOutcome = await writeAllResults(allResults);
 
   const summary: RunSummary = {
     runId,
@@ -151,8 +150,14 @@ async function runAllTests(): Promise<RunSummary> {
     totalError: allResults.filter((r) => r.status === 'error').length,
     runFailed: false,
     dbWriteFailed: !dbOutcome.ok,
-    notionWriteFailed: !notionOutcome.ok,
   };
+
+  // Notion write happens after the summary is built (not per-check like the
+  // old per-row model) since it now writes ONE page per run containing the
+  // full breakdown as block content — needs the complete summary object,
+  // not individual TestResult rows, to build that structured report.
+  const notionOutcome = await writeRunSummary(summary);
+  summary.notionWriteFailed = !notionOutcome.ok;
 
   return summary;
 }
