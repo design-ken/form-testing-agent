@@ -3,7 +3,14 @@ name: Lead Form Tester
 on:
   schedule:
     - cron: '30 2,12 * * *'   # 8:00 AM and 6:00 PM IST
-  workflow_dispatch: {}        # lets you trigger it manually from GitHub's UI too
+  # Manual dispatch via the Actions tab's "Run workflow" button occasionally
+  # re-ran against a stale commit during initial setup (confirmed live: same
+  # old commit hash + resolved deprecation warning both reappeared across
+  # repeated manual triggers even after the branch selector showed "main").
+  # If that recurs, prefer pushing a real commit to main (which always goes
+  # through the scheduled-trigger code path via workflow_dispatch below,
+  # freshly reading the workflow file) over repeated manual dispatch clicks.
+  workflow_dispatch: {}
 
 jobs:
   test:
