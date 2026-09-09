@@ -29,15 +29,17 @@ async function testOneFormDevice(
   runTimestamp: string
 ): Promise<TestResult[]> {
   const results: TestResult[] = [];
-  // --disable-dev-shm-usage: GitHub Actions' Ubuntu runners give containers
-  // a small /dev/shm (often 64MB), which Chromium's default shared-memory
-  // usage can exceed under real page loads — confirmed live as an exit-code
-  // 139 (SIGSEGV) crash with no output at all. This flag makes Chromium use
-  // /tmp instead, which is large enough. Harmless locally (macOS doesn't hit
-  // this limit), so it's applied unconditionally rather than gated by env.
+  // GitHub Actions' Ubuntu runners segfault Chromium (exit 139) even with
+  // --disable-dev-shm-usage alone — confirmed live across every scheduled
+  // run since this repo's first commit, always exit 139, both with and
+  // without that flag. This is the standard flag set for running Chromium
+  // inside a CI container: --no-sandbox because GitHub's runners don't
+  // support Chromium's full sandboxing model (missing user namespace
+  // permissions in the container), and --disable-gpu since there's no real
+  // GPU to accelerate against. All three are harmless locally.
   const browser = await chromium.launch({
     headless: true,
-    args: ['--disable-dev-shm-usage'],
+    args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu'],
   });
 
   try {
