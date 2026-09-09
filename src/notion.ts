@@ -52,12 +52,15 @@ function sleep(ms: number): Promise<void> {
 const FIELD_NAMES = {
   title: 'Name',
   status: 'Status',
-  passed: 'Passed',
   failed: 'Failed',
   atRisk: 'At Risk',
   errored: 'Errored',
   testType: 'Test Type',
   dateTime: 'Date',
+  sampleReportTime: 'Sample Report Time (ms)',
+  customFormTime: 'Custom Form Time (ms)',
+  talkToUsTime: 'Talk to Us Time (ms)',
+  discoveryCallTime: 'Book a Discovery Call Time (ms)',
 };
 
 const TEST_TYPE_VALUE = 'Lead Form';
@@ -85,18 +88,34 @@ function buildTitle(summary: RunSummary): string {
 }
 
 function buildProperties(summary: RunSummary): Record<string, unknown> {
-  return {
+  const props: Record<string, unknown> = {
     [FIELD_NAMES.title]: {
       title: [{ text: { content: buildTitle(summary) } }],
     },
     [FIELD_NAMES.status]: { select: { name: overallStatus(summary) } },
-    [FIELD_NAMES.passed]: { number: summary.totalPass },
     [FIELD_NAMES.failed]: { number: summary.totalFail },
     [FIELD_NAMES.atRisk]: { number: summary.totalAtRisk },
     [FIELD_NAMES.errored]: { number: summary.totalError },
     [FIELD_NAMES.testType]: { select: { name: TEST_TYPE_VALUE } },
     [FIELD_NAMES.dateTime]: { date: { start: summary.runTimestamp } },
   };
+
+  // Add per-form timing if available
+  if (summary.formMetrics) {
+    for (const metric of summary.formMetrics) {
+      if (metric.formName === 'Sample Report') {
+        props[FIELD_NAMES.sampleReportTime] = { number: metric.durationMs };
+      } else if (metric.formName === 'Custom Form') {
+        props[FIELD_NAMES.customFormTime] = { number: metric.durationMs };
+      } else if (metric.formName === 'Talk to Us') {
+        props[FIELD_NAMES.talkToUsTime] = { number: metric.durationMs };
+      } else if (metric.formName === 'Book a Discovery Call') {
+        props[FIELD_NAMES.discoveryCallTime] = { number: metric.durationMs };
+      }
+    }
+  }
+
+  return props;
 }
 
 // Notion block content has hard limits: max 100 blocks per API call, and
@@ -159,9 +178,31 @@ function buildPageContent(summary: RunSummary): NotionBlock[] {
     )
   );
 
+  // Add per-form timing if available
+  if (summary.formMetrics && summary.formMetrics.length > 0) {
+    blocks.push(heading2('Test Duration per Form'));
+    for (const metric of summary.formMetrics) {
+      blocks.push(bulletItem(`${metric.formName}: ${(metric.durationMs / 1000).toFixed(2)}s`));
+    }
+  }
+
   if (summary.runFailed) {
     blocks.push(paragraph(`⚠️ Run failed to complete: ${summary.runFailureReason ?? 'unknown error'}`));
     return blocks;
+  }
+
+  // Add consolidated issues list if there are any failures/at-risk
+  if (summary.consolidatedIssues && summary.consolidatedIssues.length > 0) {
+    blocks.push(heading2('Issues to Fix'));
+    for (const issue of summary.consolidatedIssues) {
+      const devices = issue.affectedDevices.join(', ');
+      const severityTag = issue.severity ? ` [${issue.severity.toUpperCase()}]` : '';
+      blocks.push(
+        bulletItem(
+          `${STATUS_ICON[issue.status === 'fail' ? 'fail' : 'at_risk']} ${issue.formName} (${issue.category})${severityTag} — ${issue.description} (affected: ${devices})`
+        )
+      );
+    }
   }
 
   const byForm = new Map<string, TestResult[]>();
@@ -171,8 +212,9 @@ function buildPageContent(summary: RunSummary): NotionBlock[] {
     byForm.set(r.formName, list);
   }
 
+  blocks.push(heading2('Detailed Results'));
   for (const [formName, formResults] of byForm) {
-    blocks.push(heading2(formName));
+    blocks.push(heading3(formName));
 
     const byDevice = new Map<Device, TestResult[]>();
     for (const r of formResults) {

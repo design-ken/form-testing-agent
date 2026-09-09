@@ -130,15 +130,49 @@ async function runAllTests(): Promise<RunSummary> {
   const runId = uuidv4();
   const runTimestamp = new Date().toISOString();
   const allResults: TestResult[] = [];
+  const formMetrics = new Map<string, { startTime: number; results: TestResult[] }>();
 
   for (const form of FORMS) {
+    const formStartTime = Date.now();
+    const formResults: TestResult[] = [];
+
     for (const viewport of VIEWPORTS) {
       const results = await testOneFormDevice(form, viewport, runId, runTimestamp);
       allResults.push(...results);
+      formResults.push(...results);
     }
+
+    formMetrics.set(form.name, { startTime: formStartTime, results: formResults });
   }
 
   const dbOutcome = insertResults(allResults);
+
+  // Build per-form timing metrics
+  const timing = Array.from(formMetrics.entries()).map(([formName, { startTime }]) => ({
+    formName,
+    durationMs: Date.now() - startTime,
+  }));
+
+  // Build consolidated issue list (dedup by description, track affected devices)
+  const issuesByDesc = new Map<string, typeof allResults>();
+  for (const result of allResults) {
+    if (result.status !== 'pass') {
+      const key = `${result.formName}|${result.category}|${result.description}`;
+      if (!issuesByDesc.has(key)) {
+        issuesByDesc.set(key, []);
+      }
+      issuesByDesc.get(key)!.push(result);
+    }
+  }
+
+  const consolidatedIssues = Array.from(issuesByDesc.values()).map((results) => ({
+    formName: results[0].formName,
+    category: results[0].category,
+    description: results[0].description,
+    severity: results[0].severity,
+    status: results[0].status,
+    affectedDevices: [...new Set(results.map((r) => r.device))],
+  }));
 
   const summary: RunSummary = {
     runId,
@@ -150,6 +184,8 @@ async function runAllTests(): Promise<RunSummary> {
     totalError: allResults.filter((r) => r.status === 'error').length,
     runFailed: false,
     dbWriteFailed: !dbOutcome.ok,
+    formMetrics: timing,
+    consolidatedIssues,
   };
 
   // Notion write happens after the summary is built (not per-check like the

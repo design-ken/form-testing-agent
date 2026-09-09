@@ -32,6 +32,20 @@ export interface TestResult {
   screenshotPath: string | null;
 }
 
+export interface FormTestMetrics {
+  formName: string;
+  durationMs: number; // total time spent testing this form across all 3 devices
+}
+
+export interface ConsolidatedIssue {
+  formName: string;
+  category: Category;
+  description: string;
+  severity: Severity | null;
+  affectedDevices: Device[]; // which viewports had this issue
+  status: Status; // pass | fail | at_risk | error
+}
+
 export interface RunSummary {
   runId: string;
   runTimestamp: string;
@@ -44,4 +58,6 @@ export interface RunSummary {
   runFailureReason?: string;
   dbWriteFailed?: boolean;
   notionWriteFailed?: boolean;
+  formMetrics?: FormTestMetrics[]; // time per form
+  consolidatedIssues?: ConsolidatedIssue[]; // deduplicated issue list
 }
