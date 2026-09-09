@@ -17,7 +17,7 @@ Part of Project ECHO — Track B (Testing Team). See `plan/track-b-testing-team.
 Twice a day (8 AM and 6 PM IST), a GitHub Actions runner:
 1. Loads all 4 forms (Sample Report, Custom Form, Talk to Us, Book a Discovery Call) across 3 viewports (desktop, tablet, mobile) — 12 test passes total
 2. Runs functional checks (fields load, validation, submission, confirmation), layout checks (cutoff, horizontal scroll, touch targets), a full-page screenshot, and an axe-core accessibility scan for each
-3. Writes every result row to `db/test-runs.sqlite` (committed back to the repo by the workflow) and to the Notion database — **Notion is the primary place to check results**
+3. Writes every individual check result to `db/test-runs.sqlite` (committed back to the repo by the workflow), and writes **one Notion page per run** — the page's properties show the run-level summary (Status, Passed/Failed/At Risk/Errored counts, Date), and the full per-form, per-device breakdown lives inside the page as structured content (a heading per form, a sub-heading per device, a bullet per check). **Notion is the primary place to check results** — open the latest page in the database to see everything about that run in one place
 4. Uploads screenshots as a GitHub Actions artifact (90-day retention)
 
 ## One-Time Setup
@@ -30,7 +30,7 @@ If you ever want to inspect it locally: `sqlite3 db/test-runs.sqlite "SELECT * F
 ### 2. Notion
 1. This writes to the existing "Testing agent log" database (ID: `3d0369df402080758409f3e680b4bb59`).
 2. Create/use a Notion integration token scoped to that database (Notion → Settings → Connections → Develop or manage integrations), and share the database with that integration (database page → `•••` → Connections).
-3. **Field mapping is live-verified**, not guessed: the columns (URL, Device, Category, Severity, Status, Description, Screenshot, Test Type, Date) were created directly via the Notion API to match `src/notion.ts`'s `FIELD_NAMES`. If columns are ever renamed in Notion, update `FIELD_NAMES` in `src/notion.ts` to match.
+3. **One page per run, not one row per check.** The database columns are run-level summaries — Status (All Passed / Issues Found / Run Failed), Passed, Failed, At Risk, Errored, Date — created directly via the Notion API to match `src/notion.ts`'s `FIELD_NAMES`. The full per-form/per-device/per-check breakdown lives as structured content *inside* each page (headings + bullets), not as separate database rows. If columns are ever renamed in Notion, update `FIELD_NAMES` in `src/notion.ts` to match.
 4. **Important — Notion API version note:** as of September 2025, Notion split each database into "data sources"; writes target a `data_source_id`, not the database ID directly. `src/notion.ts` resolves this automatically from `NOTION_DATABASE_ID` and caches it — no extra config needed, but if the Notion SDK version changes again in the future, this is the first place to check.
 
 ### 3. GitHub Secrets
