@@ -2,7 +2,13 @@ name: Lead Form Tester
 
 on:
   schedule:
-    - cron: '30 2,12 * * *'   # 8:00 AM and 6:00 PM IST
+    - cron: '0 1,5,8,11,15 * * *'   # 5:30 AM, 10:30 AM, 1:30 PM, 4:30 PM, 8:30 PM IST
+  # 5-run daily schedule optimized for early-warning coverage before traffic peaks:
+  # - 5:30 AM (1 UTC): Overnight health check, 1.5 hrs before morning peak
+  # - 10:30 AM (5 UTC): Post-morning-peak validation (8-10 AM peak coverage)
+  # - 1:30 PM (8 UTC): Pre-absolute-peak window (1-2 PM is highest traffic)
+  # - 4:30 PM (11 UTC): Afternoon stability check
+  # - 8:30 PM (15 UTC): Evening sentinel before quiet hours
   # Manual dispatch via the Actions tab's "Run workflow" button occasionally
   # re-ran against a stale commit during initial setup (confirmed live: same
   # old commit hash + resolved deprecation warning both reappeared across
