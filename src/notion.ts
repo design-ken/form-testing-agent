@@ -100,17 +100,18 @@ function buildProperties(summary: RunSummary): Record<string, unknown> {
     [FIELD_NAMES.dateTime]: { date: { start: summary.runTimestamp } },
   };
 
-  // Add per-form timing if available
+  // Add per-form timing if available (converted to seconds for readability)
   if (summary.formMetrics) {
     for (const metric of summary.formMetrics) {
+      const seconds = Math.round(metric.durationMs / 1000 * 100) / 100; // 2 decimal places
       if (metric.formName === 'Sample Report') {
-        props[FIELD_NAMES.sampleReportTime] = { number: metric.durationMs };
+        props[FIELD_NAMES.sampleReportTime] = { number: seconds };
       } else if (metric.formName === 'Custom Form') {
-        props[FIELD_NAMES.customFormTime] = { number: metric.durationMs };
+        props[FIELD_NAMES.customFormTime] = { number: seconds };
       } else if (metric.formName === 'Talk to Us') {
-        props[FIELD_NAMES.talkToUsTime] = { number: metric.durationMs };
+        props[FIELD_NAMES.talkToUsTime] = { number: seconds };
       } else if (metric.formName === 'Book a Discovery Call') {
-        props[FIELD_NAMES.discoveryCallTime] = { number: metric.durationMs };
+        props[FIELD_NAMES.discoveryCallTime] = { number: seconds };
       }
     }
   }
