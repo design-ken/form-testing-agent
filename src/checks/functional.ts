@@ -13,6 +13,7 @@ interface FunctionalCheckContext {
   device: Device;
   runId: string;
   runTimestamp: string;
+  shouldSubmit: boolean;
 }
 
 function baseResult(ctx: FunctionalCheckContext, overrides: Partial<TestResult>): TestResult {
@@ -177,6 +178,18 @@ export async function runFunctionalChecks(ctx: FunctionalCheckContext): Promise<
           status: 'at_risk',
           severity: 'medium',
           description: 'No submit button found for full-submission test.',
+        })
+      );
+    } else if (!ctx.shouldSubmit) {
+      // Only one randomly-chosen device per form per run actually submits —
+      // see run.ts. This device still gets fields filled and the submit
+      // button located above, confirming the submission path is reachable,
+      // but the button is never clicked, so no real test lead is created.
+      results.push(
+        baseResult(ctx, {
+          status: 'pass',
+          description:
+            'Submit button located and form filled — submission skipped on this device (not the randomly selected submit device for this run).',
         })
       );
     } else {

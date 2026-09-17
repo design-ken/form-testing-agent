@@ -26,7 +26,8 @@ async function testOneFormDevice(
   form: (typeof FORMS)[number],
   viewport: (typeof VIEWPORTS)[number],
   runId: string,
-  runTimestamp: string
+  runTimestamp: string,
+  shouldSubmit: boolean
 ): Promise<TestResult[]> {
   const results: TestResult[] = [];
   // GitHub Actions' Ubuntu runners segfault Chromium (exit 139) even with
@@ -57,7 +58,7 @@ async function testOneFormDevice(
       await page.waitForTimeout(2000);
       await dismissConsentBanner(page);
 
-      const ctx = { page, form, device: viewport.device, runId, runTimestamp };
+      const ctx = { page, form, device: viewport.device, runId, runTimestamp, shouldSubmit };
 
       const functionalResults = await runFunctionalChecks(ctx);
       results.push(...functionalResults);
@@ -136,8 +137,17 @@ async function runAllTests(): Promise<RunSummary> {
     const formStartTime = Date.now();
     const formResults: TestResult[] = [];
 
+    // Only one randomly-chosen device actually submits real test data per
+    // form per run — the other devices are tested up through filling the
+    // form and locating the submit button, but never click it. This cuts
+    // real CRM test-lead volume from 12/run (4 forms x 3 devices) to 4/run,
+    // while still rotating full submission-path coverage across all 3
+    // devices over multiple runs.
+    const submitDevice = VIEWPORTS[Math.floor(Math.random() * VIEWPORTS.length)].device;
+
     for (const viewport of VIEWPORTS) {
-      const results = await testOneFormDevice(form, viewport, runId, runTimestamp);
+      const shouldSubmit = viewport.device === submitDevice;
+      const results = await testOneFormDevice(form, viewport, runId, runTimestamp, shouldSubmit);
       allResults.push(...results);
       formResults.push(...results);
     }
