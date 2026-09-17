@@ -2,12 +2,16 @@ name: Lead Form Tester
 
 on:
   schedule:
-    - cron: '0 1,5,8,11,15 * * *'   # 5:30 AM, 10:30 AM, 1:30 PM, 4:30 PM, 8:30 PM IST
-  # 5-run daily schedule optimized for early-warning coverage before traffic peaks:
+    - cron: '0 1,8,15 * * *'   # 5:30 AM, 1:30 PM, 8:30 PM IST
+  # 3-run daily schedule (reduced from 5 on 2026-09-17 — GitHub Actions'
+  # schedule trigger is documented "best effort" and was confirmed live to
+  # silently drop ~40% of the 5 daily fires, with the ones that did fire
+  # landing 38min-2hr+ late; this pattern held for 5+ consecutive days before
+  # the change, see Notion run history). 3 well-spaced slots fire far more
+  # reliably than 5 clustered ones. Kept the 2 highest-value checkpoints plus
+  # an evening sentinel:
   # - 5:30 AM (1 UTC): Overnight health check, 1.5 hrs before morning peak
-  # - 10:30 AM (5 UTC): Post-morning-peak validation (8-10 AM peak coverage)
   # - 1:30 PM (8 UTC): Pre-absolute-peak window (1-2 PM is highest traffic)
-  # - 4:30 PM (11 UTC): Afternoon stability check
   # - 8:30 PM (15 UTC): Evening sentinel before quiet hours
   # Manual dispatch via the Actions tab's "Run workflow" button occasionally
   # re-ran against a stale commit during initial setup (confirmed live: same
