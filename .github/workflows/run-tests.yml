@@ -35,6 +35,10 @@ jobs:
         with:
           node-version: 24
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - run: npm ci
 
       - name: Install Playwright Chromium (with retry)
@@ -57,6 +61,23 @@ jobs:
           path: screenshots/
           retention-days: 90
           if-no-files-found: ignore
+
+      # Sends a compiled HTML summary via Resend's SMTP relay, reading the
+      # run-summary.json that src/run.ts writes at the end of main(). Runs
+      # with if: always() because test:forms can exit non-zero (a failed
+      # run) while still having written a valid summary — that's exactly
+      # the highest-value case to email about. The script itself degrades
+      # non-fatally on a missing file or missing secret (see
+      # scripts/send_report_email.py), so this never blocks the DB-commit
+      # step below. Independent of git-commit success on purpose — email
+      # delivery and committing results are unrelated concerns.
+      - name: Send email summary
+        if: always()
+        run: python3 scripts/send_report_email.py
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: edwerd@kenresearch.com
 
       # The SQLite file is the durable result store (see src/db.ts) — commit
       # it back to the repo so history persists across runs. Runs even if

@@ -1,24 +1,25 @@
 # Lead Form Tester
 
-Automated, unattended Playwright testing of Ken Research's 4 revenue-critical lead-generation forms, running twice daily on GitHub Actions. Reports to a repo-committed SQLite database and Notion. No dependency on any local machine being on, and no third-party database or email account required.
+Automated, unattended Playwright testing of Ken Research's 4 revenue-critical lead-generation forms, running 3x daily on GitHub Actions. Reports to a repo-committed SQLite database, Notion, and a compiled HTML email summary after every run. No dependency on any local machine being on, and no third-party database required.
 
 Part of Project ECHO — Track B (Testing Team). See `plan/track-b-testing-team.md` in the main Project ECHO vault for the full spec this implements.
 
-**No alerting in this version — check Notion to see results.** There is no email, no push notification, no watchdog. If you want to know whether a run happened or a form broke, open the Notion database. This was a deliberate scope cut to prioritize getting autonomous deployment working first; alerting is deferred until BUZZ (Project ECHO Track A) exists (see Deferred to Later).
+**Email is the scannable digest; Notion is the detailed record.** After every run, a compiled HTML summary (pass/fail/at-risk/error counts, per-form timing, severity-sorted issues) is emailed to `edwerd@kenresearch.com` via Resend — this is the fast way to see what's wrong at a glance. Notion still holds the full per-form/per-device/per-check breakdown for anyone who needs the detail; the email links straight to that run's Notion page. BUZZ/Slack-style alerting is still not implemented — deferred until BUZZ (Project ECHO Track A) exists (see Deferred to Later).
 
 ## ⚠️ Critical Operational Note — Read This
 
-**GitHub automatically disables scheduled workflows (`schedule:` cron triggers) after 60 days of repository inactivity (no commits/pushes).** If nobody touches this repo for two months, the twice-daily runs will silently stop — with no warning from GitHub, and with no email/watchdog layer in this version, **nothing will tell you this happened.** The only way to notice is checking Notion (or the Actions tab) and seeing no new rows for a while.
+**GitHub automatically disables scheduled workflows (`schedule:` cron triggers) after 60 days of repository inactivity (no commits/pushes).** If nobody touches this repo for two months, the scheduled runs will silently stop — with no warning from GitHub. Since there's no watchdog yet, **nothing will proactively tell you this happened** (the email summary only fires when a run actually happens — if the cron itself is disabled, there's no run to summarize). The only way to notice is checking Notion, your inbox, or the Actions tab and seeing no new activity for a while.
 
 **Mitigation:** either make a small commit to this repo at least once every ~45 days, or set a recurring personal reminder to check `gh workflow list` / the Actions tab / the Notion database periodically. This is a known GitHub platform behavior, not a bug in this code.
 
 ## What This Does
 
-Twice a day (8 AM and 6 PM IST), a GitHub Actions runner:
+Three times a day (5:30 AM, 1:30 PM, and 8:30 PM IST), a GitHub Actions runner:
 1. Loads all 4 forms (Sample Report, Custom Form, Talk to Us, Book a Discovery Call) across 3 viewports (desktop, tablet, mobile) — 12 test passes total
-2. Runs functional checks (fields load, validation, submission, confirmation), layout checks (cutoff, horizontal scroll, touch targets), a full-page screenshot, and an axe-core accessibility scan for each
-3. Writes every individual check result to `db/test-runs.sqlite` (committed back to the repo by the workflow), and writes **one Notion page per run** — the page's properties show the run-level summary (Status, Passed/Failed/At Risk/Errored counts, Date), and the full per-form, per-device breakdown lives inside the page as structured content (a heading per form, a sub-heading per device, a bullet per check). **Notion is the primary place to check results** — open the latest page in the database to see everything about that run in one place
-4. Uploads screenshots as a GitHub Actions artifact (90-day retention)
+2. Runs functional checks (fields load, validation, submission, confirmation), layout checks (cutoff, horizontal scroll, touch targets), a full-page screenshot, and an axe-core accessibility scan for each. Only one randomly-chosen device per form actually submits real test data each run (the other two devices are tested up through locating the submit button, but never click it) — cuts real CRM test-lead volume from 12/run to 4/run while still rotating full submission-path coverage across all 3 devices over multiple runs
+3. Writes every individual check result to `db/test-runs.sqlite` (committed back to the repo by the workflow), and writes **one Notion page per run** — the page's properties show the run-level summary (Status, Failed/At Risk/Errored counts, Date, per-form timing), and the full per-form, per-device breakdown lives inside the page as structured content (a heading per form, a sub-heading per device, a bullet per check). **Notion is the detailed record** — open the latest page in the database to see everything about that run in one place
+4. Sends a compiled HTML summary email to `edwerd@kenresearch.com` via Resend — leads with pass/fail/at-risk/error counts and per-form timing, then a severity-sorted list of issues, with a direct link to that run's Notion page. This is the scannable digest; it deliberately does not repeat Notion's full per-check breakdown
+5. Uploads screenshots as a GitHub Actions artifact (90-day retention)
 
 ## One-Time Setup
 
@@ -33,15 +34,22 @@ If you ever want to inspect it locally: `sqlite3 db/test-runs.sqlite "SELECT * F
 3. **One page per run, not one row per check.** The database columns are run-level summaries — Status (All Passed / Issues Found / Run Failed), Passed, Failed, At Risk, Errored, Date — created directly via the Notion API to match `src/notion.ts`'s `FIELD_NAMES`. The full per-form/per-device/per-check breakdown lives as structured content *inside* each page (headings + bullets), not as separate database rows. If columns are ever renamed in Notion, update `FIELD_NAMES` in `src/notion.ts` to match.
 4. **Important — Notion API version note:** as of September 2025, Notion split each database into "data sources"; writes target a `data_source_id`, not the database ID directly. `src/notion.ts` resolves this automatically from `NOTION_DATABASE_ID` and caches it — no extra config needed, but if the Notion SDK version changes again in the future, this is the first place to check.
 
-### 3. GitHub Secrets
+### 3. Email (Resend)
+1. Sign up at [resend.com](https://resend.com) **using `edwerd@kenresearch.com` as the account's own login email.** This matters: Resend's free sandbox sender (`onboarding@resend.dev`) can only deliver to the email address the account itself is registered under — using any other login email means sending to `edwerd@kenresearch.com` will fail with a 403 error unless a real domain is separately verified (DNS/SPF/DKIM records, outside this repo's scope). Signing up with that exact address is what makes the free tier work with zero extra setup.
+2. From the Resend dashboard, grab the API key (Settings → API Keys) — this is used as the SMTP password, not a separate API integration; `scripts/send_report_email.py` sends via plain `smtplib` against `smtp.resend.com`.
+3. Free tier is generously sized for this use case (far more than 3 emails/day).
+
+### 4. GitHub Secrets
 In the repo: **Settings → Secrets and variables → Actions → New repository secret**. Add:
 
 | Secret | Value |
 |---|---|
 | `NOTION_TOKEN` | Notion integration token |
 | `NOTION_DATABASE_ID` | `3d0369df402080758409f3e680b4bb59` |
+| `RESEND_API_KEY` | Resend API key (used as the SMTP password) |
+| `EMAIL_FROM` | `onboarding@resend.dev` (Resend's free sandbox sender) |
 
-That's the only setup required. No `DATABASE_URL`, no email provider — the SQLite file needs no credentials, just the `contents: write` permission already configured in the workflow so it can commit results back.
+No `DATABASE_URL` — the SQLite file needs no credentials, just the `contents: write` permission already configured in the workflow so it can commit results back.
 
 ## Local Development
 
@@ -53,8 +61,14 @@ npx playwright install chromium
 # NOTION_TOKEN=...
 # NOTION_DATABASE_ID=...
 
-npm run test:forms   # runs the full 12-pass suite locally
+npm run test:forms   # runs the full 12-pass suite locally, writes run-summary.json
 npm run typecheck    # TypeScript type-check with no emit
+
+# To test the email step locally (needs Python 3.9+, stdlib only, no pip installs):
+export RESEND_API_KEY=...
+export EMAIL_FROM=onboarding@resend.dev
+export EMAIL_TO=edwerd@kenresearch.com
+python3 scripts/send_report_email.py   # reads run-summary.json from the repo root by default
 ```
 
 ## Manually Triggering a Run
@@ -63,7 +77,7 @@ From the GitHub Actions tab: select "Lead Form Tester" → "Run workflow". Or vi
 
 ## Known Limitations (By Design)
 
-- **No alerting at all.** This is the biggest one — there is no email, no push notification, no watchdog. A broken form, a failed run, or a silently-disabled cron (see the 60-day note above) produces no signal anywhere except Notion/the Actions tab. This was an explicit scope decision to prioritize getting autonomous deployment working first — see Deferred to Later.
+- **Email covers every run, not a watchdog.** The email summary fires as part of a run — it tells you what happened, not whether a run *should* have happened but didn't. A silently-disabled cron (see the 60-day note above) produces zero signal, since there's no run to email about. BUZZ/Slack-style alerting and a dedicated watchdog are both still not implemented — see Deferred to Later.
 - **Backend/CRM delivery is not verified.** This suite only confirms browser-visible submission success (a confirmation message or redirect). Whether the lead actually reaches the CRM/email backend requires backend access this agent doesn't have — flagged in every report.
 - **CRM test-data filtering is not configured.** Test submissions use a tagged fake identity (`QA Test Automated` / `qa-test-leadform@kenresearch.com`) but no automatic CRM-side filtering has been set up (confirmed not required for now). Note: real tagged test leads **will** land in the actual CRM/consulting queue each time this runs — this is expected, not a bug.
 - **SQLite is single-writer.** Fine for this use case (one scheduled run at a time, ~12 rows per run), but don't add concurrent/overlapping workflow triggers without reworking `src/db.ts` — two Actions runs committing to the same file at once would conflict.
@@ -71,6 +85,6 @@ From the GitHub Actions tab: select "Lead Form Tester" → "Run workflow". Or vi
 
 ## Deferred to Later
 
-- **Alerting of any kind** — email, Slack, or (preferred, per the Track B spec) real BUZZ posting once Project ECHO's Track A exists. `src/buzz.ts` is already a stub (`notifyBuzz()`) ready to be wired to a real endpoint — swapping that in is the fastest path back to notifications when it's time.
+- **BUZZ/Slack-style alerting** — real BUZZ posting once Project ECHO's Track A exists. `src/buzz.ts` is already a stub (`notifyBuzz()`) ready to be wired to a real endpoint — swapping that in is the fastest path back to a second notification channel when it's time. (Email alerting via Resend already ships, per above.)
 - A watchdog to detect a silently-skipped/disabled cron trigger — not worth rebuilding until there's an alert channel for it to use.
 - Component Audit & Clean-up agent (separate build, can reuse this repo's Playwright setup pattern)

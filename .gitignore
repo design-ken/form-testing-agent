@@ -6,6 +6,11 @@ dist/
 *.log
 .DS_Store
 
+# Transient per-run summary, regenerated every run for the email-notify step
+# (scripts/send_report_email.py) to read — not meant to accumulate history,
+# same treatment as screenshots/.
+run-summary.json
+
 # db/test-runs.sqlite itself IS tracked and committed by the GitHub Actions
 # workflow after each run — it's the durable store, not a build artifact.
 # Only its transient journal/lock sidecar files are ignored.

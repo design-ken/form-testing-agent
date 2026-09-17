@@ -60,4 +60,5 @@ export interface RunSummary {
   notionWriteFailed?: boolean;
   formMetrics?: FormTestMetrics[]; // time per form
   consolidatedIssues?: ConsolidatedIssue[]; // deduplicated issue list
+  notionPageUrl?: string; // URL of this run's Notion page, for linking from the email summary
 }

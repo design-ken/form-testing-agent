@@ -245,8 +245,10 @@ function buildPageContent(summary: RunSummary): NotionBlock[] {
  * Retries once on failure. Never throws — caller treats Notion failure as
  * non-fatal.
  */
-export async function writeRunSummary(summary: RunSummary): Promise<{ ok: boolean; error?: string }> {
-  const attempt = async () => {
+export async function writeRunSummary(
+  summary: RunSummary
+): Promise<{ ok: boolean; error?: string; pageUrl?: string }> {
+  const attempt = async (): Promise<string | undefined> => {
     const dataSourceId = await getDataSourceId();
     const page = await getClient().pages.create({
       parent: { data_source_id: dataSourceId },
@@ -259,17 +261,19 @@ export async function writeRunSummary(summary: RunSummary): Promise<{ ok: boolea
       await getClient().blocks.children.append({ block_id: page.id, children: batch as never });
       if (i + BLOCK_BATCH_SIZE < blocks.length) await sleep(350); // ~3 req/sec ceiling
     }
+
+    return (page as { url?: string }).url;
   };
 
   try {
-    await attempt();
-    return { ok: true };
+    const pageUrl = await attempt();
+    return { ok: true, pageUrl };
   } catch (firstErr) {
     console.error('[notion] First write attempt failed, retrying in 2s:', (firstErr as Error).message);
     await sleep(2000);
     try {
-      await attempt();
-      return { ok: true };
+      const pageUrl = await attempt();
+      return { ok: true, pageUrl };
     } catch (secondErr) {
       const message = (secondErr as Error).message;
       console.error('[notion] Retry also failed:', message);

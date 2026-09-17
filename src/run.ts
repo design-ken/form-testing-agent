@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import { v4 as uuidv4 } from 'uuid';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { FORMS, VIEWPORTS } from './forms.js';
 import { runFunctionalChecks } from './checks/functional.js';
@@ -204,6 +204,7 @@ async function runAllTests(): Promise<RunSummary> {
   // not individual TestResult rows, to build that structured report.
   const notionOutcome = await writeRunSummary(summary);
   summary.notionWriteFailed = !notionOutcome.ok;
+  summary.notionPageUrl = notionOutcome.pageUrl;
 
   return summary;
 }
@@ -244,12 +245,25 @@ async function main(): Promise<void> {
   }
 
   await notifyBuzz(summary).catch((err) => console.error('[run] BUZZ stub notify failed:', err.message));
+
+  // Serialize the completed summary (happy-path or crash-path — both are
+  // covered since this runs on the same `summary` variable regardless of
+  // which branch above produced it) so the separate Python email-notify
+  // step (scripts/send_report_email.py) can read it without needing to
+  // import TypeScript types. Non-fatal: a write failure here must not stop
+  // closeDb()/exit-code handling below.
+  try {
+    await writeFile(path.resolve(process.cwd(), 'run-summary.json'), JSON.stringify(summary, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[run] Failed to write run-summary.json:', (err as Error).message);
+  }
+
   closeDb();
 
-  // No email/alert channel in v1 (deferred until BUZZ exists, per plan) — a
-  // non-zero exit code is the only failure signal now. GitHub Actions emails
-  // repo watchers on scheduled-workflow failure by default, which is the
-  // free fallback this relies on until real alerting is wired up.
+  // BUZZ/Slack-style alerting is deferred until BUZZ exists (per plan) — but
+  // an email summary now ships after every run via scripts/send_report_email.py
+  // (invoked as a separate GitHub Actions step, not from here) using this
+  // run-summary.json. A non-zero exit code remains the CI-level failure signal.
   if (summary.runFailed) {
     process.exitCode = 1;
   }
