@@ -1,6 +1,6 @@
 # Lead Form Tester
 
-Automated, unattended Playwright testing of Ken Research's 4 revenue-critical lead-generation forms, running 3x daily on GitHub Actions. Reports to a repo-committed SQLite database, Notion, and a compiled HTML email summary after every run. No dependency on any local machine being on, and no third-party database required.
+Automated, unattended Playwright testing of Ken Research's 4 revenue-critical lead-generation forms, running 3x daily on GitHub Actions. Reports to a repo-committed SQLite database, Notion, a compiled HTML email summary after every run, and a browser-viewable status dashboard on GitHub Pages. No dependency on any local machine being on, and no third-party database required.
 
 Part of Project ECHO — Track B (Testing Team). See `plan/track-b-testing-team.md` in the main Project ECHO vault for the full spec this implements.
 
@@ -19,7 +19,8 @@ Three times a day (5:30 AM, 1:30 PM, and 8:30 PM IST), a GitHub Actions runner:
 2. Runs functional checks (fields load, validation, submission, confirmation), layout checks (cutoff, horizontal scroll, touch targets), a full-page screenshot, and an axe-core accessibility scan for each. Only one randomly-chosen device per form actually submits real test data each run (the other two devices are tested up through locating the submit button, but never click it) — cuts real CRM test-lead volume from 12/run to 4/run while still rotating full submission-path coverage across all 3 devices over multiple runs
 3. Writes every individual check result to `db/test-runs.sqlite` (committed back to the repo by the workflow), and writes **one Notion page per run** — the page's properties show the run-level summary (Status, Failed/At Risk/Errored counts, Date, per-form timing), and the full per-form, per-device breakdown lives inside the page as structured content (a heading per form, a sub-heading per device, a bullet per check). **Notion is the detailed record** — open the latest page in the database to see everything about that run in one place
 4. Sends a compiled HTML summary email to `edwerd@kenresearch.com` via Resend — leads with pass/fail/at-risk/error counts and per-form timing, then a severity-sorted list of issues, with a direct link to that run's Notion page. This is the scannable digest; it deliberately does not repeat Notion's full per-check breakdown
-5. Uploads screenshots as a GitHub Actions artifact (90-day retention)
+5. Regenerates `docs/data.json` from the freshly-updated SQLite data, which powers a static status dashboard hosted on GitHub Pages — showing run health (last 7 days), current open issues, and recurring-issue trends across all history
+6. Uploads screenshots as a GitHub Actions artifact (90-day retention)
 
 ## One-Time Setup
 
@@ -51,6 +52,15 @@ In the repo: **Settings → Secrets and variables → Actions → New repository
 
 No `DATABASE_URL` — the SQLite file needs no credentials, just the `contents: write` permission already configured in the workflow so it can commit results back.
 
+### 5. Dashboard (GitHub Pages) — one-time manual step
+The dashboard's HTML/data files are already in the repo (`docs/`), but GitHub Pages hosting itself has to be turned on once, by hand — no workflow change can do this part:
+1. Go to **Settings → Pages** in the repo (`https://github.com/design-ken/form-testing-agent/settings/pages`)
+2. Under "Build and deployment" → "Source," select **"Deploy from a branch"**
+3. Branch: **`main`**, folder: **`/docs`** → Save
+4. First deploy takes about a minute; the dashboard is then live at **`https://design-ken.github.io/form-testing-agent/`** and auto-redeploys every time `docs/` changes on `main` (i.e., after every scheduled test run, per step 5 above)
+
+No secrets or extra permissions needed — this reuses the same `contents: write` git commit that already saves `db/test-runs.sqlite` after every run.
+
 ## Local Development
 
 ```bash
@@ -69,6 +79,10 @@ export RESEND_API_KEY=...
 export EMAIL_FROM=onboarding@resend.dev
 export EMAIL_TO=edwerd@kenresearch.com
 python3 scripts/send_report_email.py   # reads run-summary.json from the repo root by default
+
+# To regenerate and preview the dashboard locally:
+npm run dashboard:export   # queries db/test-runs.sqlite, writes docs/data.json
+npx serve docs              # or: python3 -m http.server --directory docs 8000
 ```
 
 ## Manually Triggering a Run
@@ -78,6 +92,8 @@ From the GitHub Actions tab: select "Lead Form Tester" → "Run workflow". Or vi
 ## Known Limitations (By Design)
 
 - **Email covers every run, not a watchdog.** The email summary fires as part of a run — it tells you what happened, not whether a run *should* have happened but didn't. A silently-disabled cron (see the 60-day note above) produces zero signal, since there's no run to email about. BUZZ/Slack-style alerting and a dedicated watchdog are both still not implemented — see Deferred to Later.
+- **Dashboard's "run health" can't see a fully-crashed run.** If a run dies before `insertResults()` runs (e.g. a Chromium segfault or timeout), it leaves zero rows in SQLite — invisible to the dashboard except as an aggregate gap between the expected (~3/day) and actual run count over the last 7 days. The dashboard can tell you "fewer runs happened than expected" but not which run or why — check the GitHub Actions tab for that.
+- **Dashboard has no per-form timing trends.** That data (`FormTestMetrics.durationMs`) is only ever computed in-memory per run and isn't persisted to SQLite — only the latest run's timing shows up in Notion/email, no historical trend exists. Would need a schema change (a new column) to start tracking; not done in this version.
 - **Backend/CRM delivery is not verified.** This suite only confirms browser-visible submission success (a confirmation message or redirect). Whether the lead actually reaches the CRM/email backend requires backend access this agent doesn't have — flagged in every report.
 - **CRM test-data filtering is not configured.** Test submissions use a tagged fake identity (`QA Test Automated` / `qa-test-leadform@kenresearch.com`) but no automatic CRM-side filtering has been set up (confirmed not required for now). Note: real tagged test leads **will** land in the actual CRM/consulting queue each time this runs — this is expected, not a bug.
 - **SQLite is single-writer.** Fine for this use case (one scheduled run at a time, ~12 rows per run), but don't add concurrent/overlapping workflow triggers without reworking `src/db.ts` — two Actions runs committing to the same file at once would conflict.

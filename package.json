@@ -1,11 +1,12 @@
 {
   "name": "form-testing-agent",
   "version": "1.0.0",
-  "description": "Lead Form Tester agent for Ken Research — twice-daily Playwright checks on revenue-critical forms, reporting to a repo-committed SQLite database and Notion.",
+  "description": "Lead Form Tester agent for Ken Research — 3x-daily Playwright checks on revenue-critical forms, reporting to a repo-committed SQLite database, Notion, an email digest, and a GitHub Pages status dashboard.",
   "type": "module",
   "main": "src/run.ts",
   "scripts": {
     "test:forms": "tsx src/run.ts",
+    "dashboard:export": "tsx src/dashboard-export.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

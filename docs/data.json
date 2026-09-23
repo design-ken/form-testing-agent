@@ -1,0 +1,741 @@
+{
+  "generatedAt": "2026-09-23T07:48:43.393Z",
+  "latestRun": {
+    "runId": "98b07553-8e12-42b3-ba78-3d66bed9d4d5",
+    "runTimestamp": "2026-09-23T05:24:52.689Z",
+    "passCount": 90,
+    "failCount": 35,
+    "atRiskCount": 31,
+    "errorCount": 0,
+    "totalCount": 156,
+    "passRatePct": 57.7
+  },
+  "runHealth": [
+    {
+      "runId": "98b07553-8e12-42b3-ba78-3d66bed9d4d5",
+      "runTimestamp": "2026-09-23T05:24:52.689Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "7148cb65-7e22-407e-80e5-dd20fe01e089",
+      "runTimestamp": "2026-09-22T18:26:43.510Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "0aeee4b6-cc18-42aa-819e-14d444727260",
+      "runTimestamp": "2026-09-22T12:59:14.751Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "4bc82718-824f-4a41-bda2-e698005e297a",
+      "runTimestamp": "2026-09-22T05:41:10.268Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "67d16448-f951-45f6-967b-2e9c169b8d44",
+      "runTimestamp": "2026-09-21T19:49:53.938Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "caf9a7d8-b227-405e-beef-59699f03e6b9",
+      "runTimestamp": "2026-09-21T14:44:02.626Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "ae5efd3a-02d5-4112-8406-8b5bfdfa60de",
+      "runTimestamp": "2026-09-21T05:43:45.264Z",
+      "passCount": 91,
+      "failCount": 35,
+      "atRiskCount": 30,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 58.3
+    },
+    {
+      "runId": "03d39911-1c28-4de3-bfb7-0b193f6f4dd5",
+      "runTimestamp": "2026-09-20T17:50:03.611Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "22c23157-1779-4d3b-9dc3-8519791f56ff",
+      "runTimestamp": "2026-09-20T12:46:55.770Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "4def9f8a-a173-4b25-957c-0f60336ccfe1",
+      "runTimestamp": "2026-09-20T05:35:00.589Z",
+      "passCount": 91,
+      "failCount": 35,
+      "atRiskCount": 30,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 58.3
+    },
+    {
+      "runId": "04f217fb-3fbf-446c-a9da-19546bbe4398",
+      "runTimestamp": "2026-09-19T17:37:49.721Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "221698ee-b2a7-4736-b167-906e8d8cb0a3",
+      "runTimestamp": "2026-09-19T12:11:29.734Z",
+      "passCount": 91,
+      "failCount": 35,
+      "atRiskCount": 30,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 58.3
+    },
+    {
+      "runId": "c77e398d-e9c2-4e7f-8260-6e4e11c8bb37",
+      "runTimestamp": "2026-09-19T05:21:36.007Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "981f826d-9aac-4bac-be20-43bdbecc2ef1",
+      "runTimestamp": "2026-09-18T17:59:17.413Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "b38a1db9-bc2c-4c07-89a3-a51ed848e121",
+      "runTimestamp": "2026-09-18T12:33:29.200Z",
+      "passCount": 91,
+      "failCount": 35,
+      "atRiskCount": 30,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 58.3
+    },
+    {
+      "runId": "eb3271cd-13e9-40be-ac9d-4b6d05239425",
+      "runTimestamp": "2026-09-18T05:26:23.481Z",
+      "passCount": 91,
+      "failCount": 35,
+      "atRiskCount": 30,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 58.3
+    },
+    {
+      "runId": "909a1617-ede4-45d4-b9ce-eefefdebb982",
+      "runTimestamp": "2026-09-17T18:43:00.863Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "930e614e-f6b9-4c90-925c-fce8cc267625",
+      "runTimestamp": "2026-09-17T12:55:31.604Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "44a262ce-b19a-4601-995f-0bf9afe7f6be",
+      "runTimestamp": "2026-09-17T07:37:53.764Z",
+      "passCount": 90,
+      "failCount": 35,
+      "atRiskCount": 31,
+      "errorCount": 0,
+      "totalCount": 156,
+      "passRatePct": 57.7
+    },
+    {
+      "runId": "9aaa18e4-8530-4c7f-a8c7-2e4a9c3b09ca",
+      "runTimestamp": "2026-09-17T05:46:43.773Z",
+      "passCount": 87,
+      "failCount": 33,
+      "atRiskCount": 18,
+      "errorCount": 0,
+      "totalCount": 138,
+      "passRatePct": 63
+    },
+    {
+      "runId": "6a23a8d1-ae9a-415b-86b6-e9b347c4c23c",
+      "runTimestamp": "2026-09-16T18:39:44.423Z",
+      "passCount": 87,
+      "failCount": 32,
+      "atRiskCount": 18,
+      "errorCount": 1,
+      "totalCount": 138,
+      "passRatePct": 63
+    },
+    {
+      "runId": "7236fb88-ad55-4b16-9eaf-fc7f0f1bf615",
+      "runTimestamp": "2026-09-16T13:10:30.029Z",
+      "passCount": 87,
+      "failCount": 33,
+      "atRiskCount": 18,
+      "errorCount": 0,
+      "totalCount": 138,
+      "passRatePct": 63
+    },
+    {
+      "runId": "72df441e-c2b3-498a-8825-50eb39a6537a",
+      "runTimestamp": "2026-09-16T05:39:25.091Z",
+      "passCount": 87,
+      "failCount": 33,
+      "atRiskCount": 18,
+      "errorCount": 0,
+      "totalCount": 138,
+      "passRatePct": 63
+    }
+  ],
+  "expectedRunsInWindow": 21,
+  "actualRunsInWindow": 23,
+  "currentIssues": [
+    {
+      "formName": "Book a Discovery Call",
+      "category": "accessibility",
+      "description": "[axe-core] button-name: Ensure buttons have discernible text (2 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "accessibility",
+      "description": "[axe-core] color-contrast: Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds (1 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "tablet"
+      ]
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "accessibility",
+      "description": "[axe-core] color-contrast: Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds (2 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "accessibility",
+      "description": "[axe-core] link-in-text-block: Ensure links are distinguished from surrounding text in a way that does not rely on color (2 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "functional",
+      "description": "Valid submission with test data produced no visible confirmation message and no redirect — possible silent failure.",
+      "severity": "high",
+      "affectedDevices": [
+        "tablet"
+      ]
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] button-name: Ensure buttons have discernible text (1 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] color-contrast: Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds (3 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] color-contrast: Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds (5 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "tablet"
+      ]
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] link-in-text-block: Ensure links are distinguished from surrounding text in a way that does not rely on color (2 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Custom Form",
+      "category": "functional",
+      "description": "Valid submission with test data produced no visible confirmation message and no redirect — possible silent failure.",
+      "severity": "high",
+      "affectedDevices": [
+        "tablet"
+      ]
+    },
+    {
+      "formName": "Sample Report",
+      "category": "accessibility",
+      "description": "[axe-core] button-name: Ensure buttons have discernible text (1 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Sample Report",
+      "category": "accessibility",
+      "description": "[axe-core] color-contrast: Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds (2 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Sample Report",
+      "category": "accessibility",
+      "description": "[axe-core] link-in-text-block: Ensure links are distinguished from surrounding text in a way that does not rely on color (2 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "accessibility",
+      "description": "[axe-core] button-name: Ensure buttons have discernible text (3 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "accessibility",
+      "description": "[axe-core] color-contrast: Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds (3 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "accessibility",
+      "description": "[axe-core] link-in-text-block: Ensure links are distinguished from surrounding text in a way that does not rely on color (2 element(s) affected)",
+      "severity": "high",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "accessibility",
+      "description": "[axe-core] heading-order: Ensure the order of headings is semantically correct (1 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "accessibility",
+      "description": "[axe-core] region: Ensure all page content is contained by landmarks (1 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] landmark-one-main: Ensure the document has a main landmark (1 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] page-has-heading-one: Ensure that the page, or at least one of its frames contains a level-one heading (1 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] region: Ensure all page content is contained by landmarks (25 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "desktop",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] region: Ensure all page content is contained by landmarks (26 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "tablet"
+      ]
+    },
+    {
+      "formName": "Sample Report",
+      "category": "accessibility",
+      "description": "[axe-core] landmark-one-main: Ensure the document has a main landmark (1 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Sample Report",
+      "category": "accessibility",
+      "description": "[axe-core] page-has-heading-one: Ensure that the page, or at least one of its frames contains a level-one heading (1 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Sample Report",
+      "category": "accessibility",
+      "description": "[axe-core] region: Ensure all page content is contained by landmarks (20 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "tablet",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "accessibility",
+      "description": "[axe-core] heading-order: Ensure the order of headings is semantically correct (1 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "desktop",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "accessibility",
+      "description": "[axe-core] landmark-one-main: Ensure the document has a main landmark (1 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "desktop",
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "accessibility",
+      "description": "[axe-core] region: Ensure all page content is contained by landmarks (25 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "accessibility",
+      "description": "[axe-core] region: Ensure all page content is contained by landmarks (29 element(s) affected)",
+      "severity": "medium",
+      "affectedDevices": [
+        "desktop"
+      ]
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "layout",
+      "description": "Submit button sits low on the mobile viewport — verify manually that the virtual keyboard does not obscure it.",
+      "severity": "low",
+      "affectedDevices": [
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Custom Form",
+      "category": "layout",
+      "description": "Submit button sits low on the mobile viewport — verify manually that the virtual keyboard does not obscure it.",
+      "severity": "low",
+      "affectedDevices": [
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Sample Report",
+      "category": "layout",
+      "description": "Submit button sits low on the mobile viewport — verify manually that the virtual keyboard does not obscure it.",
+      "severity": "low",
+      "affectedDevices": [
+        "mobile"
+      ]
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "layout",
+      "description": "Submit button sits low on the mobile viewport — verify manually that the virtual keyboard does not obscure it.",
+      "severity": "low",
+      "affectedDevices": [
+        "mobile"
+      ]
+    }
+  ],
+  "recurringIssues": [
+    {
+      "formName": "Book a Discovery Call",
+      "category": "accessibility",
+      "description": "[axe-core] button-name: Ensure buttons have discernible text (2 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 42
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] button-name: Ensure buttons have discernible text (1 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 42
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] color-contrast: Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds (5 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 42
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] landmark-one-main: Ensure the document has a main landmark (1 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 42
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] link-in-text-block: Ensure links are distinguished from surrounding text in a way that does not rely on color (2 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 42
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] page-has-heading-one: Ensure that the page, or at least one of its frames contains a level-one heading (1 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 42
+    },
+    {
+      "formName": "Custom Form",
+      "category": "accessibility",
+      "description": "[axe-core] region: Ensure all page content is contained by landmarks (26 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 42
+    },
+    {
+      "formName": "Custom Form",
+      "category": "functional",
+      "description": "Valid submission with test data produced no visible confirmation message and no redirect — possible silent failure.",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 42
+    },
+    {
+      "formName": "Custom Form",
+      "category": "layout",
+      "description": "Submit button sits low on the mobile viewport — verify manually that the virtual keyboard does not obscure it.",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 42
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "layout",
+      "description": "Submit button sits low on the mobile viewport — verify manually that the virtual keyboard does not obscure it.",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 42
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "accessibility",
+      "description": "[axe-core] heading-order: Ensure the order of headings is semantically correct (1 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 41
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "accessibility",
+      "description": "[axe-core] region: Ensure all page content is contained by landmarks (1 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 41
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "functional",
+      "description": "Valid submission with test data produced no visible confirmation message and no redirect — possible silent failure.",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 41
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "accessibility",
+      "description": "[axe-core] color-contrast: Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds (3 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 41
+    },
+    {
+      "formName": "Talk to Us",
+      "category": "accessibility",
+      "description": "[axe-core] link-in-text-block: Ensure links are distinguished from surrounding text in a way that does not rely on color (2 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 41
+    },
+    {
+      "formName": "Sample Report",
+      "category": "accessibility",
+      "description": "[axe-core] color-contrast: Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds (2 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 40
+    },
+    {
+      "formName": "Sample Report",
+      "category": "accessibility",
+      "description": "[axe-core] link-in-text-block: Ensure links are distinguished from surrounding text in a way that does not rely on color (2 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 40
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "accessibility",
+      "description": "[axe-core] color-contrast: Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds (1 element(s) affected)",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 39
+    },
+    {
+      "formName": "Book a Discovery Call",
+      "category": "layout",
+      "description": "Submit button sits low on the mobile viewport — verify manually that the virtual keyboard does not obscure it.",
+      "firstSeen": "2026-09-09T11:01:11.905Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 39
+    },
+    {
+      "formName": "Sample Report",
+      "category": "accessibility",
+      "description": "[axe-core] button-name: Ensure buttons have discernible text (1 element(s) affected)",
+      "firstSeen": "2026-09-11T12:38:10.019Z",
+      "lastSeen": "2026-09-23T05:24:52.689Z",
+      "occurrenceCount": 22
+    }
+  ]
+}

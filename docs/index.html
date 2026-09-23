@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead Form Tester — Status Dashboard</title>
+<style>
+  :root {
+    --pass: #16a34a;
+    --fail: #dc2626;
+    --at-risk: #d97706;
+    --error: #6b7280;
+    --sev-high: #dc2626;
+    --sev-medium: #d97706;
+    --sev-low: #6b7280;
+    --bg: #f8fafc;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-muted: #64748b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #ffffff;
+    color: var(--text);
+    margin: 0;
+    padding: 24px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  header {
+    padding: 20px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px 0; }
+  .subtitle { font-size: 13px; color: var(--text-muted); }
+  section { margin-bottom: 36px; }
+  h2 { font-size: 16px; margin: 0 0 14px 0; }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+  .stat-box {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px; text-align: center;
+  }
+  .stat-value { font-size: 26px; font-weight: 700; }
+  .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+  .gap-note {
+    font-size: 12px; color: var(--text-muted); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 16px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .bar-track { background: var(--border); border-radius: 4px; overflow: hidden; height: 8px; display: flex; min-width: 80px; }
+  .bar-seg { height: 100%; }
+
+  .issue-card {
+    border-left: 4px solid var(--sev-low);
+    background: var(--bg); border-radius: 0 6px 6px 0;
+    padding: 12px 16px; margin-bottom: 10px;
+  }
+  .issue-card.sev-high { border-left-color: var(--sev-high); }
+  .issue-card.sev-medium { border-left-color: var(--sev-medium); }
+  .issue-card.sev-low { border-left-color: var(--sev-low); }
+  .issue-sev { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .issue-sev.sev-high { color: var(--sev-high); }
+  .issue-sev.sev-medium { color: var(--sev-medium); }
+  .issue-sev.sev-low { color: var(--sev-low); }
+  .issue-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .issue-desc { font-size: 13px; color: #334155; margin-bottom: 6px; }
+  .issue-devices { font-size: 11px; color: var(--text-muted); }
+
+  .empty-state { font-size: 13px; color: var(--pass); padding: 8px 0; }
+  .loading, .error-state { font-size: 13px; color: var(--text-muted); padding: 20px 0; }
+  footer { font-size: 11px; color: #94a3b8; padding: 20px 0; border-top: 1px solid var(--border); margin-top: 20px; }
+</style>
+</head>
+<body>
+  <h1 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">Lead Form Tester status dashboard: run health, current open issues, and recurring issue trends for Ken Research's lead-generation forms.</h1>
+
+  <header>
+    <div style="font-size:22px;font-weight:700;">Lead Form Tester — Status Dashboard</div>
+    <div class="subtitle" id="last-updated">Loading…</div>
+  </header>
+
+  <div id="content">
+    <div class="loading">Loading dashboard data…</div>
+  </div>
+
+  <footer>Automated status page for Ken Research's Lead Form Tester agent. Regenerated after every scheduled test run.</footer>
+
+<script>
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : String(str);
+  return div.innerHTML;
+}
+
+function formatDate(iso) {
+  try {
+    return new Date(iso).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short',
+    }) + ' IST';
+  } catch {
+    return iso;
+  }
+}
+
+function statBox(label, value, colorVar) {
+  return '<div class="stat-box"><div class="stat-value" style="color:var(' + colorVar + ')">' + value + '</div><div class="stat-label">' + label + '</div></div>';
+}
+
+function renderRunHealth(data) {
+  const lr = data.latestRun;
+  let html = '<h2>Run Health</h2>';
+
+  if (lr) {
+    html += '<div class="stat-row">'
+      + statBox('Passed', lr.passCount, '--pass')
+      + statBox('Failed', lr.failCount, '--fail')
+      + statBox('At Risk', lr.atRiskCount, '--at-risk')
+      + statBox('Errored', lr.errorCount, '--error')
+      + '</div>';
+  }
+
+  const gapCount = data.expectedRunsInWindow - data.actualRunsInWindow;
+  html += '<div class="gap-note">'
+    + 'Last 7 days: <strong>' + data.actualRunsInWindow + '</strong> of ~' + data.expectedRunsInWindow + ' expected runs recorded'
+    + (gapCount > 0 ? ' (' + gapCount + ' fewer than expected — a fully crashed run leaves no trace here, so this only shows an aggregate gap, not which run or why).' : '.')
+    + '</div>';
+
+  if (!data.runHealth.length) {
+    html += '<div class="empty-state">No runs recorded in the last 7 days.</div>';
+  } else {
+    html += '<table><thead><tr><th>Run (IST)</th><th class="num">Pass</th><th class="num">Fail</th><th class="num">At Risk</th><th class="num">Error</th><th>Pass Rate</th></tr></thead><tbody>';
+    for (const r of data.runHealth) {
+      html += '<tr>'
+        + '<td>' + formatDate(r.runTimestamp) + '</td>'
+        + '<td class="num" style="color:var(--pass)">' + r.passCount + '</td>'
+        + '<td class="num" style="color:var(--fail)">' + r.failCount + '</td>'
+        + '<td class="num" style="color:var(--at-risk)">' + r.atRiskCount + '</td>'
+        + '<td class="num" style="color:var(--error)">' + r.errorCount + '</td>'
+        + '<td>'
+          + '<div class="bar-track">'
+            + '<div class="bar-seg" style="width:' + (r.totalCount ? (r.passCount / r.totalCount * 100) : 0) + '%;background:var(--pass)"></div>'
+            + '<div class="bar-seg" style="width:' + (r.totalCount ? (r.failCount / r.totalCount * 100) : 0) + '%;background:var(--fail)"></div>'
+            + '<div class="bar-seg" style="width:' + (r.totalCount ? (r.atRiskCount / r.totalCount * 100) : 0) + '%;background:var(--at-risk)"></div>'
+            + '<div class="bar-seg" style="width:' + (r.totalCount ? (r.errorCount / r.totalCount * 100) : 0) + '%;background:var(--error)"></div>'
+          + '</div>'
+          + '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + r.passRatePct + '%</div>'
+        + '</td>'
+        + '</tr>';
+    }
+    html += '</tbody></table>';
+  }
+
+  return html;
+}
+
+function renderCurrentIssues(data) {
+  let html = '<h2>Current Open Issues</h2>';
+  if (!data.currentIssues.length) {
+    html += '<div class="empty-state">No issues found — all checks passed on the latest run.</div>';
+    return html;
+  }
+  for (const issue of data.currentIssues) {
+    const sev = issue.severity || 'low';
+    const sevClass = ['high', 'medium', 'low'].includes(sev) ? sev : 'low';
+    html += '<div class="issue-card sev-' + sevClass + '">'
+      + '<div class="issue-sev sev-' + sevClass + '">' + (issue.severity || 'UNRANKED').toString().toUpperCase() + '</div>'
+      + '<div class="issue-title">' + escapeHtml(issue.formName) + ' — ' + escapeHtml(issue.category) + '</div>'
+      + '<div class="issue-desc">' + escapeHtml(issue.description) + '</div>'
+      + '<div class="issue-devices">Affected: ' + escapeHtml(issue.affectedDevices.join(', ') || 'unknown') + '</div>'
+      + '</div>';
+  }
+  return html;
+}
+
+function renderTrends(data) {
+  let html = '<h2>Trends — Recurring Issues</h2>';
+  if (!data.recurringIssues.length) {
+    html += '<div class="empty-state">No recurring issues recorded.</div>';
+    return html;
+  }
+  const maxCount = Math.max(...data.recurringIssues.map((r) => r.occurrenceCount));
+  html += '<table><thead><tr><th>Issue</th><th>Form</th><th class="num">Occurrences</th><th>First Seen</th><th>Last Seen</th></tr></thead><tbody>';
+  for (const r of data.recurringIssues) {
+    const barPct = maxCount ? (r.occurrenceCount / maxCount * 100) : 0;
+    html += '<tr>'
+      + '<td>' + escapeHtml(r.description) + '<div style="font-size:11px;color:var(--text-muted);">' + escapeHtml(r.category) + '</div></td>'
+      + '<td>' + escapeHtml(r.formName) + '</td>'
+      + '<td class="num">'
+        + r.occurrenceCount
+        + '<div class="bar-track" style="margin-top:4px;"><div class="bar-seg" style="width:' + barPct + '%;background:var(--fail)"></div></div>'
+      + '</td>'
+      + '<td style="font-size:12px;">' + formatDate(r.firstSeen) + '</td>'
+      + '<td style="font-size:12px;">' + formatDate(r.lastSeen) + '</td>'
+      + '</tr>';
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+function renderDashboard(data) {
+  document.getElementById('last-updated').textContent = 'Last updated: ' + formatDate(data.generatedAt);
+  const content = document.getElementById('content');
+  content.innerHTML =
+    '<section>' + renderRunHealth(data) + '</section>' +
+    '<section>' + renderCurrentIssues(data) + '</section>' +
+    '<section>' + renderTrends(data) + '</section>';
+}
+
+fetch('./data.json')
+  .then((r) => {
+    if (!r.ok) throw new Error('data.json returned ' + r.status);
+    return r.json();
+  })
+  .then(renderDashboard)
+  .catch((err) => {
+    document.getElementById('content').innerHTML =
+      '<div class="error-state">Could not load dashboard data (' + escapeHtml(err.message) + '). The data.json file may not exist yet — it\'s generated after the first test run.</div>';
+  });
+</script>
+</body>
+</html>
