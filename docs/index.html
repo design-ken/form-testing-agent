@@ -10,6 +10,7 @@
     --fail: #dc2626;
     --at-risk: #d97706;
     --error: #6b7280;
+    --leads: #2563eb;
     --sev-high: #dc2626;
     --sev-medium: #d97706;
     --sev-low: #6b7280;
@@ -29,6 +30,7 @@
     margin: 0 auto;
   }
   header {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px;
     padding: 20px 0;
     border-bottom: 1px solid var(--border);
     margin-bottom: 24px;
@@ -38,7 +40,13 @@
   section { margin-bottom: 36px; }
   h2 { font-size: 16px; margin: 0 0 14px 0; }
 
-  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+  select#month-picker {
+    font-family: inherit; font-size: 13px; padding: 7px 10px;
+    border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text);
+  }
+
+  .stat-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+  @media (max-width: 640px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
   .stat-box {
     background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
     padding: 14px; text-align: center;
@@ -59,33 +67,23 @@
   .bar-track { background: var(--border); border-radius: 4px; overflow: hidden; height: 8px; display: flex; min-width: 80px; }
   .bar-seg { height: 100%; }
 
-  .issue-card {
-    border-left: 4px solid var(--sev-low);
-    background: var(--bg); border-radius: 0 6px 6px 0;
-    padding: 12px 16px; margin-bottom: 10px;
-  }
-  .issue-card.sev-high { border-left-color: var(--sev-high); }
-  .issue-card.sev-medium { border-left-color: var(--sev-medium); }
-  .issue-card.sev-low { border-left-color: var(--sev-low); }
-  .issue-sev { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .issue-sev.sev-high { color: var(--sev-high); }
-  .issue-sev.sev-medium { color: var(--sev-medium); }
-  .issue-sev.sev-low { color: var(--sev-low); }
-  .issue-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-  .issue-desc { font-size: 13px; color: #334155; margin-bottom: 6px; }
-  .issue-devices { font-size: 11px; color: var(--text-muted); }
-
-  .empty-state { font-size: 13px; color: var(--pass); padding: 8px 0; }
+  .empty-state { font-size: 13px; color: var(--text-muted); padding: 8px 0; }
   .loading, .error-state { font-size: 13px; color: var(--text-muted); padding: 20px 0; }
   footer { font-size: 11px; color: #94a3b8; padding: 20px 0; border-top: 1px solid var(--border); margin-top: 20px; }
 </style>
 </head>
 <body>
-  <h1 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">Lead Form Tester status dashboard: run health, current open issues, and recurring issue trends for Ken Research's lead-generation forms.</h1>
+  <h1 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">Lead Form Tester status dashboard: test leads recorded, run health, and recurring issue trends for Ken Research's lead-generation forms, filterable by month.</h1>
 
   <header>
-    <div style="font-size:22px;font-weight:700;">Lead Form Tester — Status Dashboard</div>
-    <div class="subtitle" id="last-updated">Loading…</div>
+    <div>
+      <div style="font-size:22px;font-weight:700;">Lead Form Tester — Status Dashboard</div>
+      <div class="subtitle" id="last-updated">Loading…</div>
+    </div>
+    <div>
+      <label for="month-picker" style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Time frame</label>
+      <select id="month-picker"></select>
+    </div>
   </header>
 
   <div id="content">
@@ -95,6 +93,8 @@
   <footer>Automated status page for Ken Research's Lead Form Tester agent. Regenerated after every scheduled test run.</footer>
 
 <script>
+let DATA = null;
+
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str == null ? '' : String(str);
@@ -111,34 +111,66 @@ function formatDate(iso) {
   }
 }
 
+function formatMonthLabel(yyyyMm) {
+  const [y, m] = yyyyMm.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
 function statBox(label, value, colorVar) {
   return '<div class="stat-box"><div class="stat-value" style="color:var(' + colorVar + ')">' + value + '</div><div class="stat-label">' + label + '</div></div>';
 }
 
-function renderRunHealth(data) {
-  const lr = data.latestRun;
+function populateMonthPicker(data) {
+  const picker = document.getElementById('month-picker');
+  const options = ['<option value="all">All Time</option>']
+    .concat(data.availableMonths.map((m) => '<option value="' + m + '">' + formatMonthLabel(m) + '</option>'));
+  picker.innerHTML = options.join('');
+  picker.addEventListener('change', () => renderDashboard(DATA, picker.value));
+}
+
+function filterByMonth(items, timestampKey, month) {
+  if (month === 'all') return items;
+  return items.filter((item) => item[timestampKey].slice(0, 7) === month);
+}
+
+function renderRunHealth(runs, leadsCount, data) {
   let html = '<h2>Run Health</h2>';
 
-  if (lr) {
-    html += '<div class="stat-row">'
-      + statBox('Passed', lr.passCount, '--pass')
-      + statBox('Failed', lr.failCount, '--fail')
-      + statBox('At Risk', lr.atRiskCount, '--at-risk')
-      + statBox('Errored', lr.errorCount, '--error')
-      + '</div>';
-  }
+  const totals = runs.reduce(
+    (acc, r) => ({
+      pass: acc.pass + r.passCount, fail: acc.fail + r.failCount,
+      atRisk: acc.atRisk + r.atRiskCount, error: acc.error + r.errorCount,
+    }),
+    { pass: 0, fail: 0, atRisk: 0, error: 0 }
+  );
 
-  const gapCount = data.expectedRunsInWindow - data.actualRunsInWindow;
-  html += '<div class="gap-note">'
-    + 'Last 7 days: <strong>' + data.actualRunsInWindow + '</strong> of ~' + data.expectedRunsInWindow + ' expected runs recorded'
-    + (gapCount > 0 ? ' (' + gapCount + ' fewer than expected — a fully crashed run leaves no trace here, so this only shows an aggregate gap, not which run or why).' : '.')
+  html += '<div class="stat-row">'
+    + statBox('Test Leads Recorded', leadsCount, '--leads')
+    + statBox('Passed', totals.pass, '--pass')
+    + statBox('Failed', totals.fail, '--fail')
+    + statBox('At Risk', totals.atRisk, '--at-risk')
+    + statBox('Errored', totals.error, '--error')
     + '</div>';
 
-  if (!data.runHealth.length) {
-    html += '<div class="empty-state">No runs recorded in the last 7 days.</div>';
+  // Gap note only makes sense as a "last 7 days" sanity check against the
+  // known cadence — showing it for arbitrary/past months would need a
+  // days-in-month calc against a schedule that may not have existed yet
+  // (agent launched 2026-09-09), so it's shown only for "All Time" and the
+  // current month, using a 7-day trailing window in both cases.
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const last7 = data.runs.filter((r) => new Date(r.runTimestamp).getTime() >= sevenDaysAgo);
+  const expected7 = 7 * data.runsPerDay;
+  const gap = expected7 - last7.length;
+  html += '<div class="gap-note">'
+    + 'Last 7 days: <strong>' + last7.length + '</strong> of ~' + expected7 + ' expected runs recorded'
+    + (gap > 0 ? ' (' + gap + ' fewer than expected — a fully crashed run leaves no trace here, so this only shows an aggregate gap, not which run or why).' : '.')
+    + '</div>';
+
+  if (!runs.length) {
+    html += '<div class="empty-state">No runs recorded for this time frame.</div>';
   } else {
     html += '<table><thead><tr><th>Run (IST)</th><th class="num">Pass</th><th class="num">Fail</th><th class="num">At Risk</th><th class="num">Error</th><th>Pass Rate</th></tr></thead><tbody>';
-    for (const r of data.runHealth) {
+    for (const r of runs) {
       html += '<tr>'
         + '<td>' + formatDate(r.runTimestamp) + '</td>'
         + '<td class="num" style="color:var(--pass)">' + r.passCount + '</td>'
@@ -162,34 +194,37 @@ function renderRunHealth(data) {
   return html;
 }
 
-function renderCurrentIssues(data) {
-  let html = '<h2>Current Open Issues</h2>';
-  if (!data.currentIssues.length) {
-    html += '<div class="empty-state">No issues found — all checks passed on the latest run.</div>';
-    return html;
-  }
-  for (const issue of data.currentIssues) {
-    const sev = issue.severity || 'low';
-    const sevClass = ['high', 'medium', 'low'].includes(sev) ? sev : 'low';
-    html += '<div class="issue-card sev-' + sevClass + '">'
-      + '<div class="issue-sev sev-' + sevClass + '">' + (issue.severity || 'UNRANKED').toString().toUpperCase() + '</div>'
-      + '<div class="issue-title">' + escapeHtml(issue.formName) + ' — ' + escapeHtml(issue.category) + '</div>'
-      + '<div class="issue-desc">' + escapeHtml(issue.description) + '</div>'
-      + '<div class="issue-devices">Affected: ' + escapeHtml(issue.affectedDevices.join(', ') || 'unknown') + '</div>'
-      + '</div>';
-  }
-  return html;
-}
+function renderTrends(issueOccurrences) {
+  let html = '<h2>Trends — Top 5 Recurring Issues</h2>';
 
-function renderTrends(data) {
-  let html = '<h2>Trends — Recurring Issues</h2>';
-  if (!data.recurringIssues.length) {
-    html += '<div class="empty-state">No recurring issues recorded.</div>';
+  if (!issueOccurrences.length) {
+    html += '<div class="empty-state">No issues recorded for this time frame.</div>';
     return html;
   }
-  const maxCount = Math.max(...data.recurringIssues.map((r) => r.occurrenceCount));
+
+  // Dedup by the same formName|category|description key used elsewhere in
+  // this repo (see run.ts's consolidatedIssues logic), computed here over
+  // whatever set of occurrences is in scope for the selected month.
+  const grouped = new Map();
+  for (const occ of issueOccurrences) {
+    const key = occ.formName + '|' + occ.category + '|' + occ.description;
+    if (!grouped.has(key)) {
+      grouped.set(key, { formName: occ.formName, category: occ.category, description: occ.description, runIds: new Set(), firstSeen: occ.runTimestamp, lastSeen: occ.runTimestamp });
+    }
+    const g = grouped.get(key);
+    g.runIds.add(occ.runId);
+    if (occ.runTimestamp < g.firstSeen) g.firstSeen = occ.runTimestamp;
+    if (occ.runTimestamp > g.lastSeen) g.lastSeen = occ.runTimestamp;
+  }
+
+  const rows = Array.from(grouped.values())
+    .map((g) => ({ ...g, occurrenceCount: g.runIds.size }))
+    .sort((a, b) => b.occurrenceCount - a.occurrenceCount)
+    .slice(0, 5);
+
+  const maxCount = Math.max(...rows.map((r) => r.occurrenceCount));
   html += '<table><thead><tr><th>Issue</th><th>Form</th><th class="num">Occurrences</th><th>First Seen</th><th>Last Seen</th></tr></thead><tbody>';
-  for (const r of data.recurringIssues) {
+  for (const r of rows) {
     const barPct = maxCount ? (r.occurrenceCount / maxCount * 100) : 0;
     html += '<tr>'
       + '<td>' + escapeHtml(r.description) + '<div style="font-size:11px;color:var(--text-muted);">' + escapeHtml(r.category) + '</div></td>'
@@ -206,13 +241,18 @@ function renderTrends(data) {
   return html;
 }
 
-function renderDashboard(data) {
+function renderDashboard(data, selectedMonth) {
+  const month = selectedMonth || 'all';
   document.getElementById('last-updated').textContent = 'Last updated: ' + formatDate(data.generatedAt);
+
+  const runs = filterByMonth(data.runs, 'runTimestamp', month);
+  const issueOccurrences = filterByMonth(data.issueOccurrences, 'runTimestamp', month);
+  const leads = filterByMonth(data.leads, 'runTimestamp', month);
+
   const content = document.getElementById('content');
   content.innerHTML =
-    '<section>' + renderRunHealth(data) + '</section>' +
-    '<section>' + renderCurrentIssues(data) + '</section>' +
-    '<section>' + renderTrends(data) + '</section>';
+    '<section>' + renderRunHealth(runs, leads.length, data) + '</section>' +
+    '<section>' + renderTrends(issueOccurrences) + '</section>';
 }
 
 fetch('./data.json')
@@ -220,7 +260,11 @@ fetch('./data.json')
     if (!r.ok) throw new Error('data.json returned ' + r.status);
     return r.json();
   })
-  .then(renderDashboard)
+  .then((data) => {
+    DATA = data;
+    populateMonthPicker(data);
+    renderDashboard(data, 'all');
+  })
   .catch((err) => {
     document.getElementById('content').innerHTML =
       '<div class="error-state">Could not load dashboard data (' + escapeHtml(err.message) + '). The data.json file may not exist yet — it\'s generated after the first test run.</div>';

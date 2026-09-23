@@ -10,11 +10,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.resolve(__dirname, '..', 'db', 'test-runs.sqlite');
 const OUTPUT_PATH = path.resolve(__dirname, '..', 'docs', 'data.json');
 
-const RUN_HEALTH_WINDOW_DAYS = 7;
 const RUNS_PER_DAY = 3; // matches the current cron schedule (see run-tests.yml)
-const RECURRING_ISSUES_LIMIT = 20;
 
-interface RunHealthRow {
+interface RunRow {
   run_id: string;
   run_timestamp: string;
   pass_count: number;
@@ -24,27 +22,33 @@ interface RunHealthRow {
   total_count: number;
 }
 
-interface CurrentIssueRow {
+interface IssueOccurrenceRow {
+  run_id: string;
+  run_timestamp: string;
   form_name: string;
   category: string;
   description: string;
   severity: string | null;
-  affected_devices: string;
 }
 
-interface RecurringIssueRow {
+interface LeadRow {
+  run_timestamp: string;
   form_name: string;
-  category: string;
-  description: string;
-  first_seen: string;
-  last_seen: string;
-  occurrence_count: number;
 }
 
+/**
+ * Exports FULL history (not windowed) — the dashboard's month picker
+ * filters this client-side in the browser, so every section (run health,
+ * leads recorded, trends) can recompute instantly for any selected month
+ * without a second network request or a live backend. Dataset stays small
+ * (a few hundred rows even after months of 3x/day runs), so shipping full
+ * history as one JSON file is simpler than windowed exports plus
+ * per-range re-queries.
+ */
 function buildDashboardData(db: Database.Database) {
   const generatedAt = new Date().toISOString();
 
-  const runHealthRows = db
+  const runRows = db
     .prepare(
       `SELECT
          run_id, run_timestamp,
@@ -54,13 +58,12 @@ function buildDashboardData(db: Database.Database) {
          SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error_count,
          COUNT(*) AS total_count
        FROM test_runs
-       WHERE run_timestamp >= datetime('now', '-${RUN_HEALTH_WINDOW_DAYS} days')
        GROUP BY run_id, run_timestamp
        ORDER BY run_timestamp DESC`
     )
-    .all() as RunHealthRow[];
+    .all() as RunRow[];
 
-  const runHealth = runHealthRows.map((r) => ({
+  const runs = runRows.map((r) => ({
     runId: r.run_id,
     runTimestamp: r.run_timestamp,
     passCount: r.pass_count,
@@ -71,90 +74,58 @@ function buildDashboardData(db: Database.Database) {
     passRatePct: r.total_count > 0 ? Math.round((r.pass_count / r.total_count) * 1000) / 10 : 0,
   }));
 
-  const latestRunRow = db
-    .prepare('SELECT run_id, run_timestamp FROM test_runs ORDER BY run_timestamp DESC LIMIT 1')
-    .get() as { run_id: string; run_timestamp: string } | undefined;
-
-  let latestRun = null;
-  let currentIssues: ReturnType<typeof mapCurrentIssue>[] = [];
-
-  if (latestRunRow) {
-    const latestHealth = runHealth.find((r) => r.runId === latestRunRow.run_id);
-    latestRun = latestHealth ?? {
-      runId: latestRunRow.run_id,
-      runTimestamp: latestRunRow.run_timestamp,
-      passCount: 0,
-      failCount: 0,
-      atRiskCount: 0,
-      errorCount: 0,
-      totalCount: 0,
-      passRatePct: 0,
-    };
-
-    const currentIssueRows = db
-      .prepare(
-        `SELECT
-           form_name, category, description, severity,
-           GROUP_CONCAT(DISTINCT device) AS affected_devices
-         FROM test_runs
-         WHERE run_id = ? AND status != 'pass'
-         GROUP BY form_name, category, description, severity
-         ORDER BY CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 ELSE 3 END`
-      )
-      .all(latestRunRow.run_id) as CurrentIssueRow[];
-
-    currentIssues = currentIssueRows.map(mapCurrentIssue);
-  }
-
-  const recurringIssueRows = db
+  // One row per non-pass check occurrence, carrying its run's timestamp —
+  // the dashboard groups/dedupes these client-side per selected month
+  // (same formName|category|description key used elsewhere in this repo),
+  // rather than baking one fixed "top 20 all-time" list into the export.
+  const issueOccurrenceRows = db
     .prepare(
-      `SELECT
-         form_name, category, description,
-         MIN(run_timestamp) AS first_seen, MAX(run_timestamp) AS last_seen,
-         COUNT(DISTINCT run_id) AS occurrence_count
+      `SELECT run_id, run_timestamp, form_name, category, description, severity
        FROM test_runs
        WHERE status != 'pass'
-       GROUP BY form_name, category, description
-       ORDER BY occurrence_count DESC
-       LIMIT ${RECURRING_ISSUES_LIMIT}`
+       ORDER BY run_timestamp DESC`
     )
-    .all() as RecurringIssueRow[];
+    .all() as IssueOccurrenceRow[];
 
-  const recurringIssues = recurringIssueRows.map((r) => ({
-    formName: r.form_name,
-    category: r.category,
-    description: r.description,
-    firstSeen: r.first_seen,
-    lastSeen: r.last_seen,
-    occurrenceCount: r.occurrence_count,
-  }));
-
-  // Expected-vs-actual is an approximation, not a precise "N runs missing"
-  // count — a run that crashed before insertResults() left zero rows, so
-  // this can only show an aggregate gap against the ~3/day cadence, not
-  // identify which specific run is missing or why. Surfaced on the
-  // dashboard with that caveat rather than presented as exact.
-  const expectedRunsInWindow = RUN_HEALTH_WINDOW_DAYS * RUNS_PER_DAY;
-  const actualRunsInWindow = runHealth.length;
-
-  return {
-    generatedAt,
-    latestRun,
-    runHealth,
-    expectedRunsInWindow,
-    actualRunsInWindow,
-    currentIssues,
-    recurringIssues,
-  };
-}
-
-function mapCurrentIssue(r: CurrentIssueRow) {
-  return {
+  const issueOccurrences = issueOccurrenceRows.map((r) => ({
+    runId: r.run_id,
+    runTimestamp: r.run_timestamp,
     formName: r.form_name,
     category: r.category,
     description: r.description,
     severity: r.severity,
-    affectedDevices: r.affected_devices ? r.affected_devices.split(',') : [],
+  }));
+
+  // Real test leads = actual "Submit" clicks with valid data (see
+  // functional.ts's shouldSubmit gating) — the exact description text used
+  // there ("Valid submission...") is the marker for a real submission
+  // attempt, distinct from the "submission skipped on this device" rows
+  // that the 1-device-per-form change (2026-09-17) introduced for the
+  // non-chosen devices.
+  const leadRows = db
+    .prepare(
+      `SELECT run_timestamp, form_name
+       FROM test_runs
+       WHERE category = 'functional' AND description LIKE 'Valid submission%'
+       ORDER BY run_timestamp DESC`
+    )
+    .all() as LeadRow[];
+
+  const leads = leadRows.map((r) => ({ runTimestamp: r.run_timestamp, formName: r.form_name }));
+
+  // Distinct months present in the data, newest first — drives the
+  // dashboard's month-picker dropdown so it only ever lists months that
+  // actually have runs (no empty months to select).
+  const monthsSet = new Set(runs.map((r) => r.runTimestamp.slice(0, 7))); // "YYYY-MM"
+  const availableMonths = Array.from(monthsSet).sort().reverse();
+
+  return {
+    generatedAt,
+    runsPerDay: RUNS_PER_DAY,
+    availableMonths,
+    runs,
+    issueOccurrences,
+    leads,
   };
 }
 
@@ -162,8 +133,8 @@ async function main(): Promise<void> {
   const db = new Database(DB_PATH, { readonly: true });
   try {
     const data = buildDashboardData(db);
-    await writeFile(OUTPUT_PATH, JSON.stringify(data, null, 2), 'utf-8');
-    console.log(`[dashboard-export] Wrote ${OUTPUT_PATH}`);
+    await writeFile(OUTPUT_PATH, JSON.stringify(data), 'utf-8');
+    console.log(`[dashboard-export] Wrote ${OUTPUT_PATH} (${data.runs.length} runs, ${data.issueOccurrences.length} issue occurrences, ${data.leads.length} leads)`);
   } finally {
     db.close();
   }
