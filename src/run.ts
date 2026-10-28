@@ -6,7 +6,7 @@ import { FORMS, VIEWPORTS } from './forms.js';
 import { runFunctionalChecks } from './checks/functional.js';
 import { runLayoutChecks, dismissConsentBanner } from './checks/layout.js';
 import { runAccessibilityChecks } from './checks/accessibility.js';
-import { insertResults, closeDb } from './db.js';
+import { insertResults, closeDb, hasSubmittedToday } from './db.js';
 import { writeRunSummary } from './notion.js';
 import { notifyBuzz } from './buzz.js';
 import type { TestResult, RunSummary } from './types.js';
@@ -133,20 +133,26 @@ async function runAllTests(): Promise<RunSummary> {
   const allResults: TestResult[] = [];
   const formMetrics = new Map<string, { startTime: number; results: TestResult[] }>();
 
-  for (const form of FORMS) {
+  // Cap: at most 1 real ("Valid submission...") lead per calendar day (IST),
+  // across ALL forms combined — not per form, not per run. Whichever
+  // scheduled run happens to go first each day performs the single real
+  // submission (on one randomly-chosen form+device pair); every other run
+  // that day, and every other form/device within the winning run, is tested
+  // up through locating the submit button but the button is never clicked.
+  // This replaces the earlier "1 random device per form per run" scheme
+  // (4 real submissions/run) with a stricter daily cap, per explicit
+  // request to minimize real CRM test-lead volume further.
+  const alreadySubmittedToday = hasSubmittedToday();
+  const winningFormIndex = Math.floor(Math.random() * FORMS.length);
+  const winningDevice = VIEWPORTS[Math.floor(Math.random() * VIEWPORTS.length)].device;
+
+  for (const [formIndex, form] of FORMS.entries()) {
     const formStartTime = Date.now();
     const formResults: TestResult[] = [];
 
-    // Only one randomly-chosen device actually submits real test data per
-    // form per run — the other devices are tested up through filling the
-    // form and locating the submit button, but never click it. This cuts
-    // real CRM test-lead volume from 12/run (4 forms x 3 devices) to 4/run,
-    // while still rotating full submission-path coverage across all 3
-    // devices over multiple runs.
-    const submitDevice = VIEWPORTS[Math.floor(Math.random() * VIEWPORTS.length)].device;
-
     for (const viewport of VIEWPORTS) {
-      const shouldSubmit = viewport.device === submitDevice;
+      const shouldSubmit =
+        !alreadySubmittedToday && formIndex === winningFormIndex && viewport.device === winningDevice;
       const results = await testOneFormDevice(form, viewport, runId, runTimestamp, shouldSubmit);
       allResults.push(...results);
       formResults.push(...results);

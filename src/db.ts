@@ -81,6 +81,26 @@ export function getLatestRunTimestamp(): Date | null {
   return row?.latest ? new Date(row.latest) : null;
 }
 
+/**
+ * True if a real ("Valid submission...") lead has already been submitted
+ * today, in IST — the user's cap is 1 real submission per calendar day
+ * across all forms combined, so every run after the first one that
+ * day must skip the actual Submit click entirely. run_timestamp is stored
+ * in UTC; shifted by +5:30 to get the IST calendar date before comparing
+ * to 'now' (also shifted +5:30), matching the IST convention already used
+ * for display elsewhere (see notion.ts).
+ */
+export function hasSubmittedToday(): boolean {
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS cnt FROM test_runs
+       WHERE description LIKE 'Valid submission%'
+       AND date(run_timestamp, '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes')`
+    )
+    .get() as { cnt: number };
+  return row.cnt > 0;
+}
+
 export function closeDb(): void {
   if (db) {
     db.close();

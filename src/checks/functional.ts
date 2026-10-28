@@ -181,15 +181,16 @@ export async function runFunctionalChecks(ctx: FunctionalCheckContext): Promise<
         })
       );
     } else if (!ctx.shouldSubmit) {
-      // Only one randomly-chosen device per form per run actually submits —
-      // see run.ts. This device still gets fields filled and the submit
+      // At most 1 real submission per calendar day, across all forms and
+      // devices combined — see run.ts's hasSubmittedToday()/winning-form
+      // selection. This device still gets fields filled and the submit
       // button located above, confirming the submission path is reachable,
       // but the button is never clicked, so no real test lead is created.
       results.push(
         baseResult(ctx, {
           status: 'pass',
           description:
-            'Submit button located and form filled — submission skipped on this device (not the randomly selected submit device for this run).',
+            'Submit button located and form filled — submission skipped (not today\'s single randomly-selected submission slot).',
         })
       );
     } else {
