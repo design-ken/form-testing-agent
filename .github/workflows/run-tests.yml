@@ -24,7 +24,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest migrated to 26.04, which Playwright 1.55.1 cannot install
+    # Chromium on (confirmed 2026-11-16: every run failed with "does not support chromium
+    # on ubuntu26.04-x64"). Revisit when upgrading Playwright.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: write   # needed to commit the updated sqlite file back
@@ -43,11 +46,13 @@ jobs:
 
       - name: Install Playwright Chromium (with retry)
         run: |
+          ok=0
           for attempt in 1 2 3; do
-            npx playwright install --with-deps chromium && break
+            if npx playwright install --with-deps chromium; then ok=1; break; fi
             echo "Attempt $attempt failed, retrying in 10s..."
             sleep 10
           done
+          if [ "$ok" != "1" ]; then echo "Playwright Chromium install failed after 3 attempts"; exit 1; fi
 
       - run: npm run test:forms
         env:
