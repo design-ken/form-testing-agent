@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium, type Browser } from 'playwright';
 import { v4 as uuidv4 } from 'uuid';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -22,6 +22,21 @@ function validateEnv(): void {
   }
 }
 
+// Chromium launch is the first thing that can fail on a flaky CI runner. It
+// used to sit outside the per-combination try/catch, so a single failed launch
+// killed the whole run in under a second with no error logged. Retry once, and
+// let any remaining failure become a normal per-form/device error row.
+async function launchBrowser(): Promise<Browser> {
+  const opts = { headless: true, args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu'] };
+  try {
+    return await chromium.launch(opts);
+  } catch (err) {
+    console.error('[run] Chromium launch failed, retrying once:', (err as Error).message);
+    await new Promise((r) => setTimeout(r, 3000));
+    return await chromium.launch(opts);
+  }
+}
+
 async function testOneFormDevice(
   form: (typeof FORMS)[number],
   viewport: (typeof VIEWPORTS)[number],
@@ -38,12 +53,9 @@ async function testOneFormDevice(
   // support Chromium's full sandboxing model (missing user namespace
   // permissions in the container), and --disable-gpu since there's no real
   // GPU to accelerate against. All three are harmless locally.
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu'],
-  });
-
+  let browser: Browser | undefined;
   try {
+    browser = await launchBrowser();
     const context = await browser.newContext({
       viewport: { width: viewport.width, height: viewport.height },
     });
@@ -121,7 +133,7 @@ async function testOneFormDevice(
       screenshotPath: null,
     });
   } finally {
-    await browser.close().catch(() => {});
+    await browser?.close().catch(() => {});
   }
 
   return results;
@@ -219,14 +231,18 @@ async function main(): Promise<void> {
   validateEnv();
 
   let summary: RunSummary;
+  let timer: NodeJS.Timeout | undefined;
   try {
     summary = await Promise.race([
       runAllTests(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Run exceeded 15-minute internal timeout.')), OVERALL_TIMEOUT_MS)
-      ),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Run exceeded 15-minute internal timeout.')), OVERALL_TIMEOUT_MS);
+      }),
     ]);
+    clearTimeout(timer);
   } catch (err) {
+    clearTimeout(timer);
+    console.error('[run] RUN FAILED:', (err as Error).stack || (err as Error).message);
     // Total run failure (e.g. site down, Chromium crash, timeout). No
     // results to log anywhere in this case — the non-zero exit code below
     // and GitHub's own workflow-failure notification are the only signal.
