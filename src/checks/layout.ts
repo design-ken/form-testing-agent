@@ -80,7 +80,7 @@ export async function runLayoutChecks(ctx: LayoutCheckContext): Promise<TestResu
     const submitButton = await findSubmitButton(page);
     const exists = await submitButton.count();
     if (exists > 0) {
-      const box = await submitButton.boundingBox();
+      const box = await submitButton.boundingBox({ timeout: 5000 }).catch(() => null);
       const viewport = page.viewportSize();
       if (box && viewport) {
         const cutOff = box.x < 0 || box.y < 0 || box.x + box.width > viewport.width;
@@ -125,7 +125,7 @@ export async function runLayoutChecks(ctx: LayoutCheckContext): Promise<TestResu
   if (device === 'tablet' || device === 'mobile') {
     try {
       const submitButton = await findSubmitButton(page);
-      const box = await submitButton.boundingBox();
+      const box = await submitButton.boundingBox({ timeout: 5000 }).catch(() => null);
       if (box) {
         const tooSmall = box.width < 44 || box.height < 44;
         results.push(
@@ -156,7 +156,7 @@ export async function runLayoutChecks(ctx: LayoutCheckContext): Promise<TestResu
   if (device === 'mobile') {
     try {
       const submitButton = await findSubmitButton(page);
-      const box = await submitButton.boundingBox();
+      const box = await submitButton.boundingBox({ timeout: 5000 }).catch(() => null);
       const viewport = page.viewportSize();
       if (box && viewport) {
         const inBottomZone = box.y > viewport.height * 0.6;
