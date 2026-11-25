@@ -6,10 +6,23 @@ export type Status = 'pass' | 'fail' | 'at_risk' | 'error';
 
 export type Severity = 'low' | 'medium' | 'high';
 
+export type BrowserName = 'chromium' | 'webkit' | 'firefox';
+
+/**
+ * One test target: a device CLASS (drives class-specific checks and keeps the
+ * DB's historic desktop/tablet/mobile values), plus the real browser engine
+ * and, for phones/tablets, a Playwright device profile (user agent, touch,
+ * pixel density, mobile viewport). `label` is the human-readable name used in
+ * reports and is unique per target.
+ */
 export interface Viewport {
   device: Device;
+  label: string;
+  browser: BrowserName;
+  profile?: string; // key into playwright.devices; omit for desktop (uses width/height)
   width: number;
   height: number;
+  a11y: boolean; // run the axe scan here? (findings are mostly viewport-agnostic — avoid duplicates)
 }
 
 export interface FormDef {
@@ -25,6 +38,7 @@ export interface TestResult {
   formName: string;
   formUrl: string;
   device: Device;
+  target?: string; // Viewport.label, e.g. "iPhone 15 · Safari"
   category: Category;
   status: Status;
   severity: Severity | null;
@@ -42,7 +56,7 @@ export interface ConsolidatedIssue {
   category: Category;
   description: string;
   severity: Severity | null;
-  affectedDevices: Device[]; // which viewports had this issue
+  affectedDevices: string[]; // target labels (e.g. "iPhone 15 · Safari") that had this issue
   isNew?: boolean; // not seen in any run in the baseline window (see analysis.ts)
   urgent?: boolean; // functional/availability failure — revenue-critical
   confirmedOnRetry?: boolean;

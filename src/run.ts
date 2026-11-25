@@ -1,4 +1,4 @@
-import { chromium, type Browser } from 'playwright';
+import { chromium, firefox, webkit, devices, type Browser, type BrowserType } from 'playwright';
 import { v4 as uuidv4 } from 'uuid';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -27,16 +27,21 @@ function validateEnv(): void {
 // used to sit outside the per-combination try/catch, so a single failed launch
 // killed the whole run in under a second with no error logged. Retry once, and
 // let any remaining failure become a normal per-form/device error row.
-async function launchBrowser(): Promise<Browser> {
-  const opts = { headless: true, args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu'] };
+const ENGINES: Record<string, BrowserType> = { chromium, firefox, webkit };
+
+async function launchBrowser(name: string): Promise<Browser> {
+  // The sandbox/gpu flags are Chromium-specific (see note below); Firefox/WebKit reject them.
+  const opts = name === 'chromium' ? { headless: true, args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu'] } : { headless: true };
   try {
-    return await chromium.launch(opts);
+    return await ENGINES[name].launch(opts);
   } catch (err) {
-    console.error('[run] Chromium launch failed, retrying once:', (err as Error).message);
+    console.error(`[run] ${name} launch failed, retrying once:`, (err as Error).message);
     await new Promise((r) => setTimeout(r, 3000));
-    return await chromium.launch(opts);
+    return await ENGINES[name].launch(opts);
   }
 }
+
+const slug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 async function testOneFormDevice(
   form: (typeof FORMS)[number],
@@ -56,10 +61,13 @@ async function testOneFormDevice(
   // GPU to accelerate against. All three are harmless locally.
   let browser: Browser | undefined;
   try {
-    browser = await launchBrowser();
-    const context = await browser.newContext({
-      viewport: { width: viewport.width, height: viewport.height },
-    });
+    browser = await launchBrowser(viewport.browser);
+    // Phones/tablets: the full Playwright device profile (UA, touch, DPR, mobile viewport).
+    // `defaultBrowserType` is informational and rejected by newContext, so strip it.
+    const { defaultBrowserType: _ignored, ...profileOpts } = viewport.profile ? devices[viewport.profile] : ({} as Record<string, unknown>);
+    const context = await browser.newContext(
+      viewport.profile ? profileOpts : { viewport: { width: viewport.width, height: viewport.height } }
+    );
     const page = await context.newPage();
 
     try {
@@ -87,11 +95,11 @@ async function testOneFormDevice(
         let screenshotPath: string | null = null;
         try {
           await mkdir(SCREENSHOT_DIR, { recursive: true });
-          const fileName = `${form.id}-${viewport.device}-${runId}.png`;
+          const fileName = `${form.id}-${slug(viewport.label)}-${runId}.png`;
           screenshotPath = path.join(SCREENSHOT_DIR, fileName);
           await page.screenshot({ path: screenshotPath, fullPage: true });
         } catch (err) {
-          console.error(`[run] Screenshot failed for ${form.id}/${viewport.device}:`, (err as Error).message);
+          console.error(`[run] Screenshot failed for ${form.id}/${viewport.label}:`, (err as Error).message);
         }
 
         results.push({
@@ -110,8 +118,10 @@ async function testOneFormDevice(
           screenshotPath,
         });
 
-        const a11yResults = await runAccessibilityChecks(ctx);
-        results.push(...a11yResults);
+        if (viewport.a11y) {
+          const a11yResults = await runAccessibilityChecks(ctx);
+          results.push(...a11yResults);
+        }
       }
     } finally {
       await context.close().catch(() => {});
@@ -137,6 +147,7 @@ async function testOneFormDevice(
     await browser?.close().catch(() => {});
   }
 
+  for (const r of results) r.target = viewport.label;
   return results;
 }
 
@@ -157,7 +168,9 @@ async function runAllTests(): Promise<RunSummary> {
   // request to minimize real CRM test-lead volume further.
   const alreadySubmittedToday = hasSubmittedToday();
   const winningFormIndex = Math.floor(Math.random() * FORMS.length);
-  const winningDevice = VIEWPORTS[Math.floor(Math.random() * VIEWPORTS.length)].device;
+  // Chosen by unique target LABEL, not device class: two targets share the 'mobile' class,
+  // and matching on class would submit twice and break the 1-lead-per-day cap.
+  const winningTarget = VIEWPORTS[Math.floor(Math.random() * VIEWPORTS.length)].label;
 
   for (const [formIndex, form] of FORMS.entries()) {
     const formStartTime = Date.now();
@@ -165,18 +178,18 @@ async function runAllTests(): Promise<RunSummary> {
 
     for (const viewport of VIEWPORTS) {
       const shouldSubmit =
-        !alreadySubmittedToday && formIndex === winningFormIndex && viewport.device === winningDevice;
+        !alreadySubmittedToday && formIndex === winningFormIndex && viewport.label === winningTarget;
       let results = await testOneFormDevice(form, viewport, runId, runTimestamp, shouldSubmit);
       // One retry before a revenue-critical failure counts, so one-off blips
       // (slow hydration, network hiccup) don't page anyone. Never retried on
       // the real-submission slot: a retry there would risk a second lead,
       // breaking the 1-per-day cap.
       if (!shouldSubmit && results.some((r) => isUrgent(r.category, r.status))) {
-        console.error(`[run] ${form.name}/${viewport.device}: functional failure, retrying once.`);
+        console.error(`[run] ${form.name}/${viewport.label}: functional failure, retrying once.`);
         const retry = await testOneFormDevice(form, viewport, runId, runTimestamp, false);
         const stillBad = retry.some((r) => isUrgent(r.category, r.status));
         if (stillBad) retry.filter((r) => isUrgent(r.category, r.status)).forEach((r) => { r.description += ' (confirmed on retry)'; });
-        else console.error(`[run] ${form.name}/${viewport.device}: passed on retry — treating first failure as a one-off.`);
+        else console.error(`[run] ${form.name}/${viewport.label}: passed on retry — treating first failure as a one-off.`);
         results = retry;
       }
       allResults.push(...results);
@@ -217,7 +230,7 @@ async function runAllTests(): Promise<RunSummary> {
     description: results[0].description,
     severity: results[0].severity,
     status: results[0].status,
-    affectedDevices: [...new Set(results.map((r) => r.device))],
+    affectedDevices: [...new Set(results.map((r) => r.target ?? r.device))],
     isNew: newKeys.has(fingerprint(results[0].formName, results[0].category, results[0].description)),
     urgent: isUrgent(results[0].category, results[0].status),
     confirmedOnRetry: results[0].description.includes('(confirmed on retry)'),
@@ -228,7 +241,7 @@ async function runAllTests(): Promise<RunSummary> {
     ...new Set(
       allResults
         .filter((r) => isUrgent(r.category, r.status))
-        .flatMap((u) => allResults.filter((v) => v.formId === u.formId && v.device === u.device && v.screenshotPath).map((v) => v.screenshotPath as string))
+        .flatMap((u) => allResults.filter((v) => v.formId === u.formId && v.target === u.target && v.screenshotPath).map((v) => v.screenshotPath as string))
     ),
   ].slice(0, 3);
 

@@ -24,4 +24,5 @@ jobs:
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          EMAIL_TO: edwerd@kenresearch.com
+          # Recipients: set the repo variable EMAIL_TO (comma-separated) to change; defaults to Edwerd.
+          EMAIL_TO: ${{ vars.EMAIL_TO || 'edwerd@kenresearch.com' }}

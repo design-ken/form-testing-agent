@@ -48,7 +48,7 @@ jobs:
         run: |
           ok=0
           for attempt in 1 2 3; do
-            if npx playwright install --with-deps chromium; then ok=1; break; fi
+            if npx playwright install --with-deps chromium webkit firefox; then ok=1; break; fi
             echo "Attempt $attempt failed, retrying in 10s..."
             sleep 10
           done
@@ -82,7 +82,8 @@ jobs:
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          EMAIL_TO: edwerd@kenresearch.com
+          # Recipients: set the repo variable EMAIL_TO (comma-separated) to change; defaults to Edwerd.
+          EMAIL_TO: ${{ vars.EMAIL_TO || 'edwerd@kenresearch.com' }}
 
       # Regenerates docs/data.json from the just-updated db/test-runs.sqlite,
       # which the GitHub Pages dashboard (docs/index.html) reads client-side.

@@ -45,6 +45,9 @@ export function getDb(): Database.Database {
       CREATE INDEX IF NOT EXISTS idx_test_runs_run_id ON test_runs (run_id);
       CREATE INDEX IF NOT EXISTS idx_test_runs_run_timestamp ON test_runs (run_timestamp DESC);
     `);
+    // Additive migration: which concrete target (browser + device profile) a row came from.
+    const cols = db.prepare('PRAGMA table_info(test_runs)').all() as { name: string }[];
+    if (!cols.some((c) => c.name === 'target')) db.exec('ALTER TABLE test_runs ADD COLUMN target TEXT');
   }
   return db;
 }
@@ -59,12 +62,12 @@ export function getDb(): Database.Database {
 export function insertResults(results: TestResult[]): { ok: boolean; error?: string } {
   const insert = getDb().prepare(`
     INSERT INTO test_runs
-      (run_id, run_timestamp, form_url, form_name, device, category, status, severity, description, screenshot_path)
-    VALUES (@runId, @runTimestamp, @formUrl, @formName, @device, @category, @status, @severity, @description, @screenshotPath)
+      (run_id, run_timestamp, form_url, form_name, device, category, status, severity, description, screenshot_path, target)
+    VALUES (@runId, @runTimestamp, @formUrl, @formName, @device, @category, @status, @severity, @description, @screenshotPath, @target)
   `);
 
   const insertMany = getDb().transaction((rows: TestResult[]) => {
-    for (const r of rows) insert.run(r);
+    for (const r of rows) insert.run({ ...r, target: r.target ?? null });
   });
 
   try {
@@ -125,10 +128,14 @@ export function insertTimings(runId: string, runTimestamp: string, metrics: { fo
   }
 }
 
+// Test time per form roughly doubled when the 5-target device/browser matrix
+// replaced the 3 resized windows; only compare against runs from the new matrix.
+const MATRIX_CUTOVER = '2026-11-25T13:00:00';
+
 /** Average per-form duration over the last 7 days (excludes the run being written). */
 export function getTimingBaseline(): Record<string, number> {
   const rows = getDb()
-    .prepare(`SELECT form_name, AVG(duration_ms) AS avg_ms FROM form_timings WHERE run_timestamp >= datetime('now', '-7 days') GROUP BY form_name`)
-    .all() as { form_name: string; avg_ms: number }[];
+    .prepare(`SELECT form_name, AVG(duration_ms) AS avg_ms FROM form_timings WHERE run_timestamp >= MAX(strftime('%Y-%m-%dT%H:%M:%S', 'now', '-7 days'), ?) GROUP BY form_name`)
+    .all(MATRIX_CUTOVER) as { form_name: string; avg_ms: number }[];
   return Object.fromEntries(rows.map((r) => [r.form_name, Math.round(r.avg_ms)]));
 }

@@ -23,10 +23,17 @@ export const FORMS: FormDef[] = [
   },
 ];
 
+// 5 real-world targets (Chromium, Firefox and WebKit/Safari engines). Phones and
+// tablets use Playwright's built-in device profiles — real user agent, touch
+// input, pixel density and mobile viewport — not just a resized window.
+// Caveat: Playwright cannot emulate the on-screen keyboard, so "keyboard hides
+// the submit button" remains a manual check.
 export const VIEWPORTS: Viewport[] = [
-  { device: 'desktop', width: 1440, height: 900 },
-  { device: 'tablet', width: 768, height: 1024 },
-  { device: 'mobile', width: 375, height: 812 },
+  { device: 'desktop', label: 'Desktop · Chrome', browser: 'chromium', width: 1440, height: 900, a11y: true },
+  { device: 'desktop', label: 'Desktop · Firefox', browser: 'firefox', width: 1440, height: 900, a11y: false },
+  { device: 'tablet', label: 'iPad · Safari', browser: 'webkit', profile: 'iPad (gen 7)', width: 810, height: 1080, a11y: true },
+  { device: 'mobile', label: 'iPhone 15 · Safari', browser: 'webkit', profile: 'iPhone 15', width: 393, height: 659, a11y: true },
+  { device: 'mobile', label: 'Pixel 7 · Chrome', browser: 'chromium', profile: 'Pixel 7', width: 412, height: 839, a11y: false },
 ];
 
 export const TEST_IDENTITY = {

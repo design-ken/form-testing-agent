@@ -15,12 +15,41 @@ Part of Project ECHO — Track B (Testing Team). See `plan/track-b-testing-team.
 ## What This Does
 
 Three times a day (5:30 AM, 1:30 PM, and 8:30 PM IST), a GitHub Actions runner:
-1. Loads all 4 forms (Sample Report, Custom Form, Talk to Us, Book a Discovery Call) across 3 viewports (desktop, tablet, mobile) — 12 test passes total
-2. Runs functional checks (fields load, validation, submission, confirmation), layout checks (cutoff, horizontal scroll, touch targets), a full-page screenshot, and an axe-core accessibility scan for each. **At most 1 real submission per calendar day (IST), across all 4 forms combined** — on the run that wins the day's single randomly-chosen form+device slot, every other form/device is still tested up through locating the submit button, but the button is never clicked. Once that day's one real submission has happened, every subsequent run that day skips the actual click entirely for all 12 form/device combinations
+1. Loads all 4 forms (Sample Report, Custom Form, Talk to Us, Book a Discovery Call) on 5 real-world targets (see **Devices & Browsers** below) — 20 test passes total
+2. Runs functional checks (fields load, validation, submission, confirmation), layout checks (cutoff, horizontal scroll, touch targets), a full-page screenshot, and an axe-core accessibility scan for each. **At most 1 real submission per calendar day (IST), across all 4 forms combined** — on the run that wins the day's single randomly-chosen form+device slot, every other form/target is still tested up through locating the submit button, but the button is never clicked. Once that day's one real submission has happened, every subsequent run that day skips the actual click entirely for all 20 form/target combinations. The winning slot is chosen by unique target label (two targets share the "mobile" class — matching on class would submit twice)
 3. Writes every individual check result to `db/test-runs.sqlite` (committed back to the repo by the workflow), and writes **one Notion page per run** — the page's properties show the run-level summary (Status, Failed/At Risk/Errored counts, Date, per-form timing), and the full per-form, per-device breakdown lives inside the page as structured content (a heading per form, a sub-heading per device, a bullet per check). **Notion is the detailed record** — open the latest page in the database to see everything about that run in one place
 4. Sends a compiled HTML summary email to `edwerd@kenresearch.com` via Resend — leads with pass/fail/at-risk/error counts and per-form timing, then a severity-sorted list of issues, with a direct link to that run's Notion page. This is the scannable digest; it deliberately does not repeat Notion's full per-check breakdown
 5. Regenerates `docs/data.json` from the freshly-updated SQLite data (full history, not windowed), which powers a static status dashboard hosted on GitHub Pages — showing total test leads recorded, run health, and the top 5 recurring issues, all filterable by month via a picker that recomputes everything client-side
 6. Uploads screenshots as a GitHub Actions artifact (90-day retention)
+
+## Devices & Browsers
+
+Each form is tested on 5 targets, defined in `src/forms.ts` (`VIEWPORTS`):
+
+| Target | Engine | How it's emulated |
+|---|---|---|
+| Desktop · Chrome | Chromium | 1440×900 window |
+| Desktop · Firefox | Firefox | 1440×900 window |
+| iPad · Safari | WebKit | Playwright device profile `iPad (gen 7)` — real iPad user agent, touch, 2× pixel density, 810×1080 |
+| iPhone 15 · Safari | WebKit | profile `iPhone 15` — iOS user agent, touch, 3× density, 393×659 |
+| Pixel 7 · Chrome | Chromium | profile `Pixel 7` — Android user agent, touch, 2.625× density, 412×839 |
+
+- The DB's `device` column keeps the class (`desktop`/`tablet`/`mobile`, so history stays comparable and class-specific layout checks still apply); the new `target` column holds the label shown in reports.
+- The axe accessibility scan runs on Desktop·Chrome, iPad and iPhone only (`a11y: true`) — its findings are mostly viewport-agnostic, so scanning every target would just duplicate them.
+- **Limits:** this is emulation on Linux CI, not physical devices. Playwright cannot emulate the on-screen keyboard, so "keyboard covers the submit button" stays a manual check (flagged as at-risk). Real-device quirks (iOS Safari specifics beyond the WebKit engine, OEM browsers) are not covered.
+- Add or change a target by editing `VIEWPORTS`; any key of `playwright.devices` works as `profile`. The workflow installs `chromium webkit firefox`.
+
+## Reports (what you receive)
+
+- **Per-run email** (every run): headline is **All clear / New issues / URGENT / RUN FAILED**. *Urgent* = a form cannot load or submit (functional/availability failure); a failure is retried once before it counts (never on the real-submission slot) and is marked "confirmed on retry". The email lists urgent issues (page screenshot attached), issues **new** this run, how many **known** issues are unchanged (not repeated), what was **fixed** since the last run, and test time per form vs its 7-day average (compared only against runs on the current 5-target matrix). "New" = not seen in any run in the last 14 days (`src/analysis.ts`; issue identity ignores axe's element counts).
+- **Weekly accessibility digest** (Mondays 9:00 AM IST, `weekly-digest.yml` → `src/weekly-digest.ts`): open-issue trend over 5 weeks, the top issues grouped by rule with a plain-language fix, and what was fixed this week. For the design backlog.
+- **Watchdog** (9:30 AM and 10:30 PM IST, `watchdog.yml` → `src/watchdog.ts`): emails only if no run has finished in 11 hours, the latest run had 0 passing checks, or (after 10 PM IST) the day's one real lead never happened. Covers the "GitHub silently skipped/disabled the schedule" blind spot.
+- **Notion**: each run page starts with a "What changed" section (new / known / fixed, urgent failures).
+- **Dashboard**: "show only new issues" filter and per-form test-time trend lines. A run where nothing passed (e.g. browser failed to install) is marked failed rather than green.
+
+### Who receives the emails
+
+All three workflows read the recipient from the repo **variable** `EMAIL_TO` (Settings → Secrets and variables → Actions → Variables), falling back to `edwerd@kenresearch.com`. It accepts a comma-separated list. **Caveat:** with Resend's free sandbox sender (`onboarding@resend.dev`) mail can only be delivered to the account owner's own address — to email anyone else, verify the `kenresearch.com` domain in Resend (DNS records), set `EMAIL_FROM` to an address on it, then add recipients to `EMAIL_TO`. Without that, share the Notion database or the GitHub Pages dashboard instead.
 
 ## One-Time Setup
 
@@ -65,13 +94,13 @@ No secrets or extra permissions needed — this reuses the same `contents: write
 
 ```bash
 npm install
-npx playwright install chromium
+npx playwright install chromium webkit firefox
 
 # Create a .env file (gitignored) with the same variables as the GitHub Secrets table above:
 # NOTION_TOKEN=...
 # NOTION_DATABASE_ID=...
 
-npm run test:forms   # runs the full 12-pass suite locally, writes run-summary.json
+npm run test:forms   # runs the full 20-pass suite locally, writes run-summary.json
 npm run typecheck    # TypeScript type-check with no emit
 
 # To test the email step locally (needs Python 3.9+, stdlib only, no pip installs):
@@ -97,6 +126,7 @@ From the GitHub Actions tab: select "Lead Form Tester" → "Run workflow". Or vi
 - **Backend/CRM delivery is not verified.** This suite only confirms browser-visible submission success (a confirmation message or redirect). Whether the lead actually reaches the CRM/email backend requires backend access this agent doesn't have — flagged in every report.
 - **CRM test-data filtering is not configured.** Test submissions use a tagged fake identity (`QA Test Automated` / `qa-test-leadform@kenresearch.com`) but no automatic CRM-side filtering has been set up (confirmed not required for now). Note: real tagged test leads **will** land in the actual CRM/consulting queue each time this runs — this is expected, not a bug.
 - **SQLite is single-writer.** Fine for this use case (one scheduled run at a time, ~12 rows per run), but don't add concurrent/overlapping workflow triggers without reworking `src/db.ts` — two Actions runs committing to the same file at once would conflict.
+- **Emulation, not hardware.** See Devices & Browsers — no physical devices, no on-screen-keyboard emulation.
 - **Client-side hydration timing.** The live site doesn't fully respond to clicks until its JS framework hydrates after `domcontentloaded` (confirmed live — `networkidle` never resolves on this site, likely due to a persistent background connection). `functional.ts` and `run.ts` use a fixed ~2s settle delay instead. If the real site becomes slower to hydrate, this delay may need increasing.
 
 ## Deferred to Later
