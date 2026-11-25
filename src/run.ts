@@ -6,7 +6,8 @@ import { FORMS, VIEWPORTS } from './forms.js';
 import { runFunctionalChecks } from './checks/functional.js';
 import { runLayoutChecks, dismissConsentBanner } from './checks/layout.js';
 import { runAccessibilityChecks } from './checks/accessibility.js';
-import { insertResults, closeDb, hasSubmittedToday } from './db.js';
+import { insertResults, closeDb, hasSubmittedToday, getDb, insertTimings, getTimingBaseline } from './db.js';
+import { computeDelta, fingerprint, isUrgent } from './analysis.js';
 import { writeRunSummary } from './notion.js';
 import { notifyBuzz } from './buzz.js';
 import type { TestResult, RunSummary } from './types.js';
@@ -165,7 +166,19 @@ async function runAllTests(): Promise<RunSummary> {
     for (const viewport of VIEWPORTS) {
       const shouldSubmit =
         !alreadySubmittedToday && formIndex === winningFormIndex && viewport.device === winningDevice;
-      const results = await testOneFormDevice(form, viewport, runId, runTimestamp, shouldSubmit);
+      let results = await testOneFormDevice(form, viewport, runId, runTimestamp, shouldSubmit);
+      // One retry before a revenue-critical failure counts, so one-off blips
+      // (slow hydration, network hiccup) don't page anyone. Never retried on
+      // the real-submission slot: a retry there would risk a second lead,
+      // breaking the 1-per-day cap.
+      if (!shouldSubmit && results.some((r) => isUrgent(r.category, r.status))) {
+        console.error(`[run] ${form.name}/${viewport.device}: functional failure, retrying once.`);
+        const retry = await testOneFormDevice(form, viewport, runId, runTimestamp, false);
+        const stillBad = retry.some((r) => isUrgent(r.category, r.status));
+        if (stillBad) retry.filter((r) => isUrgent(r.category, r.status)).forEach((r) => { r.description += ' (confirmed on retry)'; });
+        else console.error(`[run] ${form.name}/${viewport.device}: passed on retry — treating first failure as a one-off.`);
+        results = retry;
+      }
       allResults.push(...results);
       formResults.push(...results);
     }
@@ -173,6 +186,10 @@ async function runAllTests(): Promise<RunSummary> {
     formMetrics.set(form.name, { startTime: formStartTime, results: formResults });
   }
 
+  // History comparisons must run BEFORE this run is written, so "known"
+  // never includes the run itself.
+  const { delta, newKeys } = computeDelta(getDb(), allResults);
+  const timingBaselineMs = getTimingBaseline();
   const dbOutcome = insertResults(allResults);
 
   // Build per-form timing metrics
@@ -180,6 +197,7 @@ async function runAllTests(): Promise<RunSummary> {
     formName,
     durationMs: Date.now() - startTime,
   }));
+  insertTimings(runId, runTimestamp, timing);
 
   // Build consolidated issue list (dedup by description, track affected devices)
   const issuesByDesc = new Map<string, typeof allResults>();
@@ -200,7 +218,19 @@ async function runAllTests(): Promise<RunSummary> {
     severity: results[0].severity,
     status: results[0].status,
     affectedDevices: [...new Set(results.map((r) => r.device))],
+    isNew: newKeys.has(fingerprint(results[0].formName, results[0].category, results[0].description)),
+    urgent: isUrgent(results[0].category, results[0].status),
+    confirmedOnRetry: results[0].description.includes('(confirmed on retry)'),
   }));
+
+  // Page screenshots for the urgent failures' form/device combos, attached to the email.
+  const urgentScreenshots = [
+    ...new Set(
+      allResults
+        .filter((r) => isUrgent(r.category, r.status))
+        .flatMap((u) => allResults.filter((v) => v.formId === u.formId && v.device === u.device && v.screenshotPath).map((v) => v.screenshotPath as string))
+    ),
+  ].slice(0, 3);
 
   const summary: RunSummary = {
     runId,
@@ -210,7 +240,13 @@ async function runAllTests(): Promise<RunSummary> {
     totalFail: allResults.filter((r) => r.status === 'fail').length,
     totalAtRisk: allResults.filter((r) => r.status === 'at_risk').length,
     totalError: allResults.filter((r) => r.status === 'error').length,
-    runFailed: false,
+    // A run where nothing passed tested nothing (e.g. browser failed to install/launch) —
+    // that must never look green. Surface it as a failed run.
+    runFailed: allResults.length > 0 && !allResults.some((r) => r.status === 'pass'),
+    runFailureReason: allResults.some((r) => r.status === 'pass') ? undefined : 'No check passed in this run — the browser likely failed to start, so nothing was actually tested.',
+    issueDelta: delta,
+    timingBaselineMs,
+    urgentScreenshots,
     dbWriteFailed: !dbOutcome.ok,
     formMetrics: timing,
     consolidatedIssues,

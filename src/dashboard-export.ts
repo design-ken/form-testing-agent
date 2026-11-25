@@ -119,8 +119,23 @@ function buildDashboardData(db: Database.Database) {
   const monthsSet = new Set(runs.map((r) => r.runTimestamp.slice(0, 7))); // "YYYY-MM"
   const availableMonths = Array.from(monthsSet).sort().reverse();
 
+  // Per-form test duration history (table is new — absent on DBs from before the upgrade).
+  let timings: { runTimestamp: string; formName: string; durationMs: number }[] = [];
+  try {
+    timings = (db
+      .prepare(`SELECT run_timestamp, form_name, duration_ms FROM form_timings ORDER BY run_timestamp DESC LIMIT 600`)
+      .all() as { run_timestamp: string; form_name: string; duration_ms: number }[]).map((r) => ({
+      runTimestamp: r.run_timestamp,
+      formName: r.form_name,
+      durationMs: r.duration_ms,
+    }));
+  } catch {
+    /* no timings yet */
+  }
+
   return {
     generatedAt,
+    timings,
     runsPerDay: RUNS_PER_DAY,
     availableMonths,
     runs,

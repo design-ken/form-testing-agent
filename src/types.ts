@@ -43,7 +43,23 @@ export interface ConsolidatedIssue {
   description: string;
   severity: Severity | null;
   affectedDevices: Device[]; // which viewports had this issue
+  isNew?: boolean; // not seen in any run in the baseline window (see analysis.ts)
+  urgent?: boolean; // functional/availability failure — revenue-critical
+  confirmedOnRetry?: boolean;
   status: Status; // pass | fail | at_risk | error
+}
+
+export interface FixedIssue {
+  formName: string;
+  category: Category;
+  description: string;
+  severity: Severity | null;
+}
+
+export interface IssueDelta {
+  newCount: number;
+  knownCount: number;
+  fixed: FixedIssue[]; // present in the previous full run, gone now
 }
 
 export interface RunSummary {
@@ -60,5 +76,8 @@ export interface RunSummary {
   notionWriteFailed?: boolean;
   formMetrics?: FormTestMetrics[]; // time per form
   consolidatedIssues?: ConsolidatedIssue[]; // deduplicated issue list
+  issueDelta?: IssueDelta;
+  timingBaselineMs?: Record<string, number>; // 7-day average per form, for 'vs normal' in the email
+  urgentScreenshots?: string[]; // paths of page screenshots for urgent failures (attached to the email)
   notionPageUrl?: string; // URL of this run's Notion page, for linking from the email summary
 }

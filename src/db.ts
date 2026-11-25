@@ -11,7 +11,7 @@ const DB_PATH = path.resolve(__dirname, '..', 'db', 'test-runs.sqlite');
 
 let db: Database.Database | null = null;
 
-function getDb(): Database.Database {
+export function getDb(): Database.Database {
   if (!db) {
     db = new Database(DB_PATH);
     // Plain rollback-journal mode (the default), not WAL — this file is
@@ -35,6 +35,13 @@ function getDb(): Database.Database {
         screenshot_path TEXT,
         created_at TEXT DEFAULT (datetime('now'))
       );
+      CREATE TABLE IF NOT EXISTS form_timings (
+        run_id TEXT NOT NULL,
+        run_timestamp TEXT NOT NULL,
+        form_name TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_form_timings_form ON form_timings (form_name, run_timestamp DESC);
       CREATE INDEX IF NOT EXISTS idx_test_runs_run_id ON test_runs (run_id);
       CREATE INDEX IF NOT EXISTS idx_test_runs_run_timestamp ON test_runs (run_timestamp DESC);
     `);
@@ -106,4 +113,22 @@ export function closeDb(): void {
     db.close();
     db = null;
   }
+}
+
+/** Persists per-form test duration so trends/baselines exist (was in-memory only). */
+export function insertTimings(runId: string, runTimestamp: string, metrics: { formName: string; durationMs: number }[]): void {
+  try {
+    const ins = getDb().prepare('INSERT INTO form_timings (run_id, run_timestamp, form_name, duration_ms) VALUES (?, ?, ?, ?)');
+    getDb().transaction(() => { for (const m of metrics) ins.run(runId, runTimestamp, m.formName, Math.round(m.durationMs)); })();
+  } catch (err) {
+    console.error('[db] Timing insert failed:', (err as Error).message);
+  }
+}
+
+/** Average per-form duration over the last 7 days (excludes the run being written). */
+export function getTimingBaseline(): Record<string, number> {
+  const rows = getDb()
+    .prepare(`SELECT form_name, AVG(duration_ms) AS avg_ms FROM form_timings WHERE run_timestamp >= datetime('now', '-7 days') GROUP BY form_name`)
+    .all() as { form_name: string; avg_ms: number }[];
+  return Object.fromEntries(rows.map((r) => [r.form_name, Math.round(r.avg_ms)]));
 }

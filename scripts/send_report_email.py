@@ -42,14 +42,28 @@ def load_summary(path):
         return None
 
 
+FORMS = ["Sample Report", "Custom Form", "Talk to Us", "Book a Discovery Call"]
+FONT = "font-family:-apple-system,Helvetica,Arial,sans-serif;"
+
+
+def split_issues(summary):
+    issues = summary.get("consolidatedIssues") or []
+    urgent = [i for i in issues if i.get("urgent")]
+    new_other = [i for i in issues if i.get("isNew") and not i.get("urgent")]
+    return urgent, new_other
+
+
 def overall_status(summary):
-    # Mirrors notion.ts's overallStatus() exactly so the email and Notion
-    # report never disagree on the headline status word.
+    # Headline word + colour. Urgent (a form that cannot submit/load) outranks
+    # everything; known backlog alone never turns the headline amber.
     if summary.get("runFailed"):
         return "RUN FAILED", "#dc2626"
-    if summary.get("totalFail", 0) > 0 or summary.get("totalError", 0) > 0 or summary.get("totalAtRisk", 0) > 0:
-        return "Issues Found", "#d97706"
-    return "All Passed", "#16a34a"
+    urgent, new_other = split_issues(summary)
+    if urgent:
+        return "URGENT", "#dc2626"
+    if new_other:
+        return "New issues", "#d97706"
+    return "All clear", "#16a34a"
 
 
 def format_ist_timestamp(iso_timestamp):
@@ -61,124 +75,141 @@ def format_ist_timestamp(iso_timestamp):
 
 
 def build_subject(summary, status_word):
-    date_str = format_ist_timestamp(summary.get("runTimestamp", ""))
-    return (
-        f"[Lead Form Tester] {status_word} — "
-        f"{summary.get('totalPass', 0)} pass / {summary.get('totalFail', 0)} fail / "
-        f"{summary.get('totalAtRisk', 0)} at risk / {summary.get('totalError', 0)} error — {date_str}"
-    )
+    when = format_ist_timestamp(summary.get("runTimestamp", ""))
+    urgent, new_other = split_issues(summary)
+    if summary.get("runFailed"):
+        return f"[Lead Form Tester] \U0001F534 RUN FAILED \u2014 nothing was tested \u00b7 {when}"
+    if urgent:
+        u = urgent[0]
+        devs = ", ".join(u.get("affectedDevices") or [])
+        extra = f" (+{len(urgent) - 1} more)" if len(urgent) > 1 else ""
+        return f"[Lead Form Tester] \U0001F534 URGENT \u2014 \"{u.get('formName')}\" cannot submit/load on {devs}{extra} \u00b7 {when}"
+    if new_other:
+        n = len(new_other)
+        return f"[Lead Form Tester] \U0001F7E1 {n} new issue{'s' if n != 1 else ''} \u2014 all forms still submitting \u00b7 {when}"
+    return f"[Lead Form Tester] \u2705 All lead forms working \u2014 no new issues \u00b7 {when}"
 
 
 def stat_box(label, value, color):
     return f"""
     <td style="padding:12px 16px;text-align:center;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
-      <div style="font-size:28px;font-weight:700;color:{color};font-family:-apple-system,Helvetica,Arial,sans-serif;">{value}</div>
-      <div style="font-size:12px;color:#64748b;font-family:-apple-system,Helvetica,Arial,sans-serif;text-transform:uppercase;letter-spacing:0.5px;">{label}</div>
+      <div style="font-size:26px;font-weight:700;color:{color};{FONT}">{value}</div>
+      <div style="font-size:12px;color:#64748b;{FONT}">{label}</div>
     </td>
     """
 
 
-def build_issue_card(issue):
+def esc(t):
+    return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def build_issue_card(issue, tag=None):
     severity = issue.get("severity")
     color = SEVERITY_COLOR.get(severity, SEVERITY_COLOR[None])
-    severity_label = (severity or "unranked").upper()
     devices = ", ".join(issue.get("affectedDevices", []) or [])
+    badge = f'<span style="background:#ede9fe;color:#6d28d9;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:6px;">{tag}</span>' if tag else ""
+    retry = ' <span style="color:#dc2626;font-size:11px;">\u00b7 confirmed on retry</span>' if issue.get("confirmedOnRetry") else ""
+    desc = esc(issue.get("description", "").replace(" (confirmed on retry)", ""))
     return f"""
-    <div style="border-left:4px solid {color};background-color:#f8fafc;padding:12px 16px;margin-bottom:10px;border-radius:0 6px 6px 0;font-family:-apple-system,Helvetica,Arial,sans-serif;">
-      <div style="font-size:11px;font-weight:700;color:{color};letter-spacing:0.5px;margin-bottom:4px;">{severity_label}</div>
-      <div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:4px;">{issue.get('formName', '')} — {issue.get('category', '')}</div>
-      <div style="font-size:13px;color:#334155;margin-bottom:6px;">{issue.get('description', '')}</div>
-      <div style="font-size:11px;color:#64748b;">Affected: {devices or 'unknown'}</div>
+    <div style="border-left:4px solid {color};background-color:#f8fafc;padding:12px 16px;margin-bottom:10px;border-radius:0 6px 6px 0;{FONT}">
+      <div style="font-size:11px;font-weight:700;color:{color};letter-spacing:0.5px;margin-bottom:4px;">{(severity or 'unranked').upper()}{badge}</div>
+      <div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:4px;">{esc(issue.get('formName', ''))} \u2014 {esc(issue.get('category', ''))}</div>
+      <div style="font-size:13px;color:#334155;margin-bottom:6px;">{desc}{retry}</div>
+      <div style="font-size:11px;color:#64748b;">Affected: {esc(devices or 'unknown')}</div>
     </div>
     """
+
+
+def lead_line(summary):
+    for r in summary.get("results") or []:
+        if str(r.get("description", "")).startswith("Valid submission"):
+            ok = r.get("status") == "pass"
+            mark = "\u2714 confirmation shown" if ok else "\u2718 no confirmation"
+            return f"Today's real test lead: {r.get('formName')} / {r.get('device')} {mark}"
+    return "No real test lead in this run (today's one lead was already sent, or this run didn't draw the slot)."
+
+
+def timing_table(summary, urgent):
+    metrics = {m.get("formName"): m.get("durationMs", 0) for m in (summary.get("formMetrics") or [])}
+    base = summary.get("timingBaselineMs") or {}
+    bad_forms = {u.get("formName") for u in urgent}
+    rows = ""
+    for name in FORMS:
+        if name not in metrics:
+            continue
+        ms = metrics[name]
+        b = base.get(name)
+        delta = f"{round((ms - b) / b * 100):+d}%" if b else "\u2014"
+        slow = b and ms > b * 1.5
+        ok = '<span style="color:#dc2626;font-weight:700;">BROKEN</span>' if name in bad_forms else '<span style="color:#16a34a;font-weight:700;">OK</span>'
+        dcol = "#d97706" if slow else "#334155"
+        rows += f"""<tr>
+          <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;">{name}</td>
+          <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;">{ok}</td>
+          <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;text-align:right;">{round(ms / 1000, 1)}s</td>
+          <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;text-align:right;color:{dcol};">{delta}</td></tr>"""
+    head = "".join(f'<th style="text-align:{a};font-size:11px;color:#64748b;padding:6px 10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{h}</th>' for h, a in [("Form", "left"), ("Submit / load", "left"), ("Test time", "right"), ("vs 7-day avg", "right")])
+    return f'<table style="width:100%;border-collapse:collapse;{FONT}"><tr>{head}</tr>{rows}</table>'
+
+
+def section(title, inner):
+    return f'<div style="padding:4px 20px 14px 20px;{FONT}"><div style="font-size:13px;font-weight:700;color:#1e293b;margin:10px 0 8px;">{title}</div>{inner}</div>'
 
 
 def build_html(summary):
     status_word, status_color = overall_status(summary)
-    timestamp_str = format_ist_timestamp(summary.get("runTimestamp", ""))
-
-    header = f"""
-    <div style="background-color:{status_color};color:#ffffff;padding:16px 20px;border-radius:8px 8px 0 0;font-family:-apple-system,Helvetica,Arial,sans-serif;">
+    when = format_ist_timestamp(summary.get("runTimestamp", ""))
+    parts = [f"""
+    <div style="background-color:{status_color};color:#ffffff;padding:16px 20px;border-radius:8px 8px 0 0;{FONT}">
       <div style="font-size:18px;font-weight:700;">{status_word}</div>
-      <div style="font-size:13px;opacity:0.9;margin-top:2px;">Lead Form Tester — {timestamp_str}</div>
-    </div>
-    """
-
-    body_parts = [header]
+      <div style="font-size:13px;opacity:0.9;margin-top:2px;">Lead Form Tester \u2014 {when}</div>
+    </div>"""]
 
     if summary.get("runFailed"):
-        reason = summary.get("runFailureReason", "unknown error")
-        body_parts.append(f"""
-        <div style="padding:20px;">
-          <div style="background-color:#fef2f2;border:1px solid #dc2626;border-radius:8px;padding:16px;font-family:-apple-system,Helvetica,Arial,sans-serif;">
-            <div style="font-weight:700;color:#dc2626;margin-bottom:6px;">Run failed to complete</div>
-            <div style="font-size:13px;color:#334155;">{reason}</div>
-          </div>
-        </div>
-        """)
-        return "".join(body_parts) + _footer()
+        parts.append(f"""<div style="padding:20px;"><div style="background-color:#fef2f2;border:1px solid #dc2626;border-radius:8px;padding:16px;{FONT}">
+          <div style="font-weight:700;color:#dc2626;margin-bottom:6px;">Run failed to complete</div>
+          <div style="font-size:13px;color:#334155;">{esc(summary.get('runFailureReason', 'unknown error'))}</div></div></div>""")
+        return "".join(parts) + _footer()
+
+    urgent, new_other = split_issues(summary)
+    delta = summary.get("issueDelta") or {}
+    known = delta.get("knownCount", 0)
+    fixed = delta.get("fixed") or []
 
     stats = "".join([
-        stat_box("Passed", summary.get("totalPass", 0), "#16a34a"),
-        stat_box("Failed", summary.get("totalFail", 0), "#dc2626"),
-        stat_box("At Risk", summary.get("totalAtRisk", 0), "#d97706"),
-        stat_box("Errored", summary.get("totalError", 0), "#6b7280"),
+        stat_box("forms healthy", f"{4 - len({u.get('formName') for u in urgent})} / 4", "#16a34a" if not urgent else "#dc2626"),
+        stat_box("new issues", len(new_other) + len(urgent), "#d97706" if (new_other or urgent) else "#16a34a"),
+        stat_box("known (unchanged)", known, "#64748b"),
+        stat_box("fixed since last run", len(fixed), "#16a34a"),
     ])
-    body_parts.append(f"""
-    <div style="padding:20px 20px 0 20px;">
-      <table style="width:100%;border-collapse:separate;border-spacing:8px 0;">
-        <tr>{stats}</tr>
-      </table>
-    </div>
-    """)
+    parts.append(f'<div style="padding:18px 20px 4px;"><table style="width:100%;border-collapse:separate;border-spacing:8px 0;"><tr>{stats}</tr></table>'
+                 f'<div style="font-size:12px;color:#64748b;margin-top:10px;{FONT}">{esc(lead_line(summary))}</div></div>')
 
-    form_metrics = summary.get("formMetrics") or []
-    if form_metrics:
-        rows = "".join(
-            f"""<tr>
-                  <td style="padding:6px 12px;font-size:13px;color:#334155;border-bottom:1px solid #e2e8f0;">{m.get('formName', '')}</td>
-                  <td style="padding:6px 12px;font-size:13px;color:#334155;border-bottom:1px solid #e2e8f0;text-align:right;">{round(m.get('durationMs', 0) / 1000, 2)}s</td>
-                </tr>"""
-            for m in form_metrics
-        )
-        body_parts.append(f"""
-        <div style="padding:20px;font-family:-apple-system,Helvetica,Arial,sans-serif;">
-          <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px;">Test Duration per Form</div>
-          <table style="width:100%;border-collapse:collapse;">{rows}</table>
-        </div>
-        """)
+    if urgent:
+        parts.append(section("Needs action now", "".join(build_issue_card(i) for i in urgent) +
+                             (f'<div style="font-size:12px;color:#64748b;">Page screenshot from this run attached ({len(summary.get("urgentScreenshots") or [])}).</div>' if summary.get("urgentScreenshots") else "")))
+    if new_other:
+        parts.append(section("New this run", "".join(build_issue_card(i, "NEW") for i in sorted(new_other, key=lambda i: SEVERITY_ORDER.get(i.get("severity"), 3)))))
+    if fixed:
+        items = "".join(f'<li style="margin-bottom:3px;">\u2714 {esc(f.get("formName"))} \u2014 {esc(f.get("description")[:110])}</li>' for f in fixed[:8])
+        parts.append(section("Fixed since last run", f'<ul style="margin:0;padding-left:18px;font-size:13px;color:#334155;">{items}</ul>'))
+    if not urgent and not new_other:
+        parts.append(section("Issues", f'<div style="font-size:13px;color:#16a34a;">No new issues. {known} known accessibility/layout issue(s) unchanged \u2014 see the weekly digest.</div>'))
+    elif known:
+        parts.append(f'<div style="padding:0 20px 8px;font-size:12px;color:#64748b;{FONT}">Plus {known} known issue(s) unchanged since earlier runs (not repeated here).</div>')
 
-    issues = summary.get("consolidatedIssues") or []
-    body_parts.append('<div style="padding:0 20px 20px 20px;font-family:-apple-system,Helvetica,Arial,sans-serif;">')
-    body_parts.append('<div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:10px;">Issues to Fix</div>')
-    if issues:
-        sorted_issues = sorted(issues, key=lambda i: SEVERITY_ORDER.get(i.get("severity"), 3))
-        body_parts.append("".join(build_issue_card(i) for i in sorted_issues))
-    else:
-        body_parts.append('<div style="font-size:13px;color:#16a34a;">No issues found — all checks passed.</div>')
-    body_parts.append("</div>")
+    parts.append(section("Submit health & speed", timing_table(summary, urgent)))
 
     notion_url = summary.get("notionPageUrl")
-    if notion_url:
-        body_parts.append(f"""
-        <div style="padding:0 20px 20px 20px;font-family:-apple-system,Helvetica,Arial,sans-serif;">
-          <a href="{notion_url}" style="display:inline-block;font-size:13px;color:#2563eb;text-decoration:none;font-weight:600;">View full per-check results in Notion &rarr;</a>
-        </div>
-        """)
-    else:
-        body_parts.append("""
-        <div style="padding:0 20px 20px 20px;font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:13px;color:#64748b;">
-          See today's Notion page for full per-check results.
-        </div>
-        """)
-
-    body_parts.append(_footer())
-    return "".join(body_parts)
+    link = f'<a href="{notion_url}" style="font-size:13px;color:#2563eb;text-decoration:none;font-weight:600;">View full per-check results in Notion &rarr;</a>' if notion_url else '<span style="font-size:13px;color:#64748b;">See today\'s Notion page for full per-check results.</span>'
+    parts.append(f'<div style="padding:0 20px 20px;{FONT}">{link}</div>')
+    parts.append(_footer())
+    return "".join(parts)
 
 
 def _footer():
-    return """
-    <div style="padding:12px 20px;border-top:1px solid #e2e8f0;font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:11px;color:#94a3b8;">
+    return f"""
+    <div style="padding:12px 20px;border-top:1px solid #e2e8f0;{FONT}font-size:11px;color:#94a3b8;">
       Automated message from the Lead Form Tester agent.
     </div>
     """
@@ -186,43 +217,41 @@ def _footer():
 
 def build_plain_text(summary):
     status_word, _ = overall_status(summary)
-    lines = [
-        f"Lead Form Tester — {status_word}",
-        f"Run: {format_ist_timestamp(summary.get('runTimestamp', ''))}",
-        "",
-    ]
+    lines = [f"Lead Form Tester \u2014 {status_word}", f"Run: {format_ist_timestamp(summary.get('runTimestamp', ''))}", ""]
     if summary.get("runFailed"):
         lines.append(f"Run failed: {summary.get('runFailureReason', 'unknown error')}")
         return "\n".join(lines)
-
-    lines.append(
-        f"{summary.get('totalPass', 0)} passed, {summary.get('totalFail', 0)} failed, "
-        f"{summary.get('totalAtRisk', 0)} at risk, {summary.get('totalError', 0)} errored"
-    )
-    lines.append("")
-    issues = summary.get("consolidatedIssues") or []
-    if issues:
-        lines.append("Issues to Fix:")
-        for issue in sorted(issues, key=lambda i: SEVERITY_ORDER.get(i.get("severity"), 3)):
-            severity = (issue.get("severity") or "unranked").upper()
-            devices = ", ".join(issue.get("affectedDevices", []) or [])
-            lines.append(f"- [{severity}] {issue.get('formName', '')} ({issue.get('category', '')}): {issue.get('description', '')} (affected: {devices})")
-    else:
-        lines.append("No issues found — all checks passed.")
-
+    urgent, new_other = split_issues(summary)
+    delta = summary.get("issueDelta") or {}
+    lines.append(lead_line(summary))
+    lines.append(f"{len(urgent)} urgent, {len(new_other)} new, {delta.get('knownCount', 0)} known (unchanged), {len(delta.get('fixed') or [])} fixed")
+    for label, group in (("NEEDS ACTION NOW", urgent), ("NEW", new_other)):
+        for i in group:
+            lines.append(f"- [{label}] {i.get('formName')} ({i.get('category')}): {i.get('description')} (affected: {', '.join(i.get('affectedDevices') or [])})")
     notion_url = summary.get("notionPageUrl")
-    lines.append("")
-    lines.append(f"Full details: {notion_url}" if notion_url else "See today's Notion page for full per-check results.")
+    lines += ["", f"Full details: {notion_url}" if notion_url else "See today's Notion page for full per-check results."]
     return "\n".join(lines)
 
 
-def send_email(subject, html_body, text_body, smtp_host, smtp_port, username, password, sender, recipient):
-    message = MIMEMultipart("alternative")
+def send_email(subject, html_body, text_body, smtp_host, smtp_port, username, password, sender, recipient, attachments=None):
+    from email.mime.image import MIMEImage
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(text_body, "plain"))
+    alt.attach(MIMEText(html_body, "html"))
+    message = MIMEMultipart("mixed") if attachments else alt
+    if attachments:
+        message.attach(alt)
+        for path in attachments:
+            try:
+                with open(path, "rb") as f:
+                    img = MIMEImage(f.read(), name=os.path.basename(path))
+                img.add_header("Content-Disposition", "attachment", filename=os.path.basename(path))
+                message.attach(img)
+            except OSError as err:
+                print(f"[send_report_email] Could not attach {path}: {err}", file=sys.stderr)
     message["Subject"] = subject
     message["From"] = sender
     message["To"] = recipient
-    message.attach(MIMEText(text_body, "plain"))
-    message.attach(MIMEText(html_body, "html"))
 
     with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
         server.login(username, password)
@@ -259,6 +288,7 @@ def main():
             password=api_key,
             sender=email_from,
             recipient=email_to,
+            attachments=(summary.get("urgentScreenshots") or []),
         )
     except (smtplib.SMTPException, OSError) as err:
         print(f"[send_report_email] Failed to send email: {err}", file=sys.stderr)

@@ -17,3 +17,5 @@ run-summary.json
 db/*.sqlite-journal
 db/*.sqlite-wal
 db/*.sqlite-shm
+weekly-digest.json
+watchdog.json

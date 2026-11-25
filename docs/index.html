@@ -93,6 +93,7 @@
   <footer>Automated status page for Ken Research's Lead Form Tester agent. Regenerated after every scheduled test run.</footer>
 
 <script>
+let HIDE_KNOWN = false;
 let DATA = null;
 
 function escapeHtml(str) {
@@ -217,17 +218,22 @@ function renderTrends(issueOccurrences) {
     if (occ.runTimestamp > g.lastSeen) g.lastSeen = occ.runTimestamp;
   }
 
-  const rows = Array.from(grouped.values())
+  const newCutoff = new Date(DATA.generatedAt).getTime() - 14 * 86400000;
+  const isNew = (g) => new Date(g.firstSeen).getTime() >= newCutoff;
+  let rows = Array.from(grouped.values())
     .map((g) => ({ ...g, occurrenceCount: g.runIds.size }))
-    .sort((a, b) => b.occurrenceCount - a.occurrenceCount)
-    .slice(0, 5);
+    .sort((a, b) => b.occurrenceCount - a.occurrenceCount);
+  if (HIDE_KNOWN) rows = rows.filter(isNew);
+  rows = rows.slice(0, 5);
+  html += '<label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:8px;"><input type="checkbox" id="hide-known"' + (HIDE_KNOWN ? ' checked' : '') + '> Show only new issues (first seen in the last 14 days)</label>';
+  if (!rows.length) return html + '<div class="empty-state">No new issues in this time frame.</div>';
 
   const maxCount = Math.max(...rows.map((r) => r.occurrenceCount));
   html += '<table><thead><tr><th>Issue</th><th>Form</th><th class="num">Occurrences</th><th>First Seen</th><th>Last Seen</th></tr></thead><tbody>';
   for (const r of rows) {
     const barPct = maxCount ? (r.occurrenceCount / maxCount * 100) : 0;
     html += '<tr>'
-      + '<td>' + escapeHtml(r.description) + '<div style="font-size:11px;color:var(--text-muted);">' + escapeHtml(r.category) + '</div></td>'
+      + '<td>' + (isNew(r) ? '<span style="background:#ede9fe;color:#6d28d9;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-right:6px;">NEW</span>' : '') + escapeHtml(r.description) + '<div style="font-size:11px;color:var(--text-muted);">' + escapeHtml(r.category) + '</div></td>'
       + '<td>' + escapeHtml(r.formName) + '</td>'
       + '<td class="num">'
         + r.occurrenceCount
@@ -241,6 +247,26 @@ function renderTrends(issueOccurrences) {
   return html;
 }
 
+function renderTimings(timings) {
+  let html = '<h2>Test Time per Form — Trend</h2>';
+  if (!timings || !timings.length) return html + '<div class="empty-state">Timing history starts with the first run after the upgrade.</div>';
+  const forms = Array.from(new Set(timings.map((t) => t.formName)));
+  html += '<table><thead><tr><th>Form</th><th>Last 30 runs</th><th class="num">Latest</th><th class="num">7-day avg</th></tr></thead><tbody>';
+  for (const f of forms) {
+    const pts = timings.filter((t) => t.formName === f).sort((a, b) => a.runTimestamp.localeCompare(b.runTimestamp)).slice(-30);
+    const vals = pts.map((p) => p.durationMs / 1000);
+    const max = Math.max(...vals), min = Math.min(...vals), span = max - min || 1;
+    const path = vals.map((v, i) => (vals.length > 1 ? i / (vals.length - 1) : 0) * 120 + ',' + (28 - (v - min) / span * 24)).join(' ');
+    const wk = pts.filter((p) => new Date(p.runTimestamp).getTime() >= new Date(DATA.generatedAt).getTime() - 7 * 86400000);
+    const avg = wk.length ? wk.reduce((a, p) => a + p.durationMs, 0) / wk.length / 1000 : null;
+    const last = vals[vals.length - 1];
+    const slow = avg && last > avg * 1.5;
+    html += '<tr><td>' + escapeHtml(f) + '</td><td><svg width="120" height="30" viewBox="0 0 120 30"><polyline fill="none" stroke="#7b61d9" stroke-width="1.5" points="' + path + '"/></svg></td>'
+      + '<td class="num"' + (slow ? ' style="color:#d97706;font-weight:700;"' : '') + '>' + last.toFixed(1) + 's</td><td class="num">' + (avg ? avg.toFixed(1) + 's' : '—') + '</td></tr>';
+  }
+  return html + '</tbody></table>';
+}
+
 function renderDashboard(data, selectedMonth) {
   const month = selectedMonth || 'all';
   document.getElementById('last-updated').textContent = 'Last updated: ' + formatDate(data.generatedAt);
@@ -252,7 +278,10 @@ function renderDashboard(data, selectedMonth) {
   const content = document.getElementById('content');
   content.innerHTML =
     '<section>' + renderRunHealth(runs, leads.length, data) + '</section>' +
-    '<section>' + renderTrends(issueOccurrences) + '</section>';
+    '<section>' + renderTrends(issueOccurrences) + '</section>' +
+    '<section>' + renderTimings(data.timings) + '</section>';
+  const cb = document.getElementById('hide-known');
+  if (cb) cb.addEventListener('change', () => { HIDE_KNOWN = cb.checked; renderDashboard(data, selectedMonth); });
 }
 
 fetch('./data.json')

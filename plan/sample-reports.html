@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lead Form Tester — Sample Reports</title>
+<style>
+:root{--bg:#f4f4f2;--card:#fff;--ink:#14141a;--mut:#6b6b76;--line:#e6e4de;--ok:#1f9d6b;--okbg:#e8f6ef;--bad:#d64545;--badbg:#fdecec;--warn:#b7791f;--warnbg:#fdf4e1;--new:#7b61d9;--newbg:#f1eefb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;padding:32px 16px}
+.wrap{max-width:780px;margin:0 auto}h1{font-size:22px;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 28px}
+.label{display:inline-block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:34px 0 8px}
+.mail{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.hdr{padding:12px 20px;border-bottom:1px solid var(--line);color:var(--mut);font-size:12px}.hdr b{color:var(--ink)}
+.body{padding:20px}
+.banner{border-radius:10px;padding:14px 16px;font-weight:600;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.banner.ok{background:var(--okbg);color:var(--ok)}.banner.bad{background:var(--badbg);color:var(--bad)}.banner small{font-weight:400;color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.k{border:1px solid var(--line);border-radius:10px;padding:10px 12px}.k b{display:block;font-size:20px}.k span{color:var(--mut);font-size:12px}
+h3{font-size:13px;margin:18px 0 8px}
+table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;color:var(--mut);font-weight:500;font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line)}td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.tag{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:600}
+.t-ok{background:var(--okbg);color:var(--ok)}.t-bad{background:var(--badbg);color:var(--bad)}.t-warn{background:var(--warnbg);color:var(--warn)}.t-new{background:var(--newbg);color:var(--new)}
+.shot{background:repeating-linear-gradient(45deg,#f0eee8,#f0eee8 8px,#f7f6f2 8px,#f7f6f2 16px);border:1px dashed var(--line);border-radius:8px;height:90px;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:12px;margin-top:8px}
+.note{color:var(--mut);font-size:12px;margin-top:14px}.btn{display:inline-block;background:var(--ink);color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;text-decoration:none;margin-top:10px}
+.spark{display:flex;align-items:flex-end;gap:3px;height:34px}.spark i{width:10px;background:#cfc8f0;border-radius:2px}.spark i.hi{background:var(--new)}
+@media(max-width:560px){.grid{grid-template-columns:repeat(2,1fr)}}
+</style></head><body><div class="wrap">
+<h1>Lead Form Tester — sample reports</h1>
+<p class="sub">Mock-ups of the four report types proposed. Layout and wording are real proposals; the numbers use today's real patterns (e.g. 12 contrast failures) but specific values are illustrative.</p>
+
+<span class="label">1 · Per-run email — normal day (quiet by design)</span>
+<div class="mail"><div class="hdr"><b>Subject:</b> [Lead Form Tester] ✅ All lead forms working — no new issues · 25 Nov, 1:30 PM IST</div><div class="body">
+<div class="banner ok"><span>All 4 forms can submit leads</span><small>Today's real test lead: Talk to Us / mobile ✔ confirmation shown</small></div>
+<div class="grid"><div class="k"><b>4 / 4</b><span>forms healthy</span></div><div class="k"><b>0</b><span>new issues</span></div><div class="k"><b>41</b><span>known issues (unchanged)</span></div><div class="k"><b>2.1s</b><span>avg load · normal</span></div></div>
+<table><tr><th>Form</th><th>Submit works</th><th>Load time</th><th>vs 7-day avg</th></tr>
+<tr><td>Sample Report</td><td><span class="tag t-ok">OK</span></td><td>2.0s</td><td>±0%</td></tr>
+<tr><td>Custom Form</td><td><span class="tag t-ok">OK</span></td><td>2.3s</td><td>+4%</td></tr>
+<tr><td>Talk to Us</td><td><span class="tag t-ok">OK</span></td><td>1.9s</td><td>−2%</td></tr>
+<tr><td>Book a Discovery Call</td><td><span class="tag t-ok">OK</span></td><td>2.2s</td><td>+1%</td></tr></table>
+<p class="note">Known accessibility backlog is no longer repeated here — see the weekly digest.</p></div></div>
+
+<span class="label">2 · Per-run email — something broke (urgent)</span>
+<div class="mail"><div class="hdr"><b>Subject:</b> [Lead Form Tester] 🔴 URGENT — "Book a Discovery Call" cannot submit on mobile · 26 Nov, 8:30 PM IST</div><div class="body">
+<div class="banner bad"><span>1 revenue-critical failure · 1 new warning</span><small>Confirmed on retry (failed 2 of 2 attempts)</small></div>
+<h3>Needs action now</h3>
+<table><tr><th>Where</th><th>What happened</th><th>First seen</th></tr>
+<tr><td>Book a Discovery Call<br>mobile</td><td><span class="tag t-bad">SUBMIT BROKEN</span> Clicked submit; no confirmation or redirect within 10s. Last passing run: 26 Nov 1:30 PM (7h earlier).</td><td>This run</td></tr></table>
+<div class="shot">Screenshot at moment of failure (attached)</div>
+<h3>New this run</h3>
+<table><tr><td><span class="tag t-new">NEW</span></td><td>Talk to Us / tablet — heading order skips from H1 to H4</td><td><span class="tag t-warn">low</span></td></tr></table>
+<h3>Unchanged</h3><p class="note" style="margin:0">41 known accessibility issues, no change since last week.</p>
+<a class="btn">Open run details in Notion</a></div></div>
+
+<span class="label">3 · Weekly accessibility digest (for the design backlog)</span>
+<div class="mail"><div class="hdr"><b>Subject:</b> [Lead Form Tester] Weekly accessibility digest · 17–23 Nov</div><div class="body">
+<div class="grid"><div class="k"><b>41</b><span>open issues</span></div><div class="k"><b>3</b><span>fixed this week</span></div><div class="k"><b>1</b><span>new</span></div><div class="k"><b>12</b><span>high severity</span></div></div>
+<div class="spark" aria-label="Open issues by week"><i style="height:100%"></i><i style="height:92%"></i><i style="height:88%"></i><i style="height:84%"></i><i class="hi" style="height:80%"></i></div>
+<p class="note" style="margin-top:4px">Open issues, last 5 weeks — trending down</p>
+<h3>Fix these first (most users affected)</h3>
+<table><tr><th>Issue</th><th>Where</th><th>Suggested fix</th></tr>
+<tr><td><span class="tag t-bad">high</span> Low colour contrast</td><td>All 4 forms · 12 spots</td><td>Darken the grey helper/placeholder text to at least 4.5:1 against its background.</td></tr>
+<tr><td><span class="tag t-bad">high</span> Links not distinguishable from text</td><td>All forms · 12 spots</td><td>Underline in-paragraph links or add a 3:1 contrast difference.</td></tr>
+<tr><td><span class="tag t-bad">high</span> Buttons without a name</td><td>5 spots (icon buttons)</td><td>Add an <code>aria-label</code> to each icon-only button.</td></tr>
+<tr><td><span class="tag t-warn">med</span> No main landmark / H1</td><td>Several pages</td><td>Wrap page content in <code>&lt;main&gt;</code>; one H1 per page.</td></tr></table>
+<h3>Fixed since last week</h3><p class="note" style="margin:0">✔ Missing form-field labels on Custom Form · ✔ Duplicate IDs on Talk to Us · ✔ Image alt text on Sample Report</p></div></div>
+
+<span class="label">4 · Watchdog alert (silent-failure check, separate from test runs)</span>
+<div class="mail"><div class="hdr"><b>Subject:</b> [Lead Form Tester] ⚠️ No test run completed in 11 hours</div><div class="body">
+<div class="banner bad"><span>Tests have not run since 24 Nov, 8:30 PM IST</span><small>Expected a run by 2:30 AM · checked 7:40 AM</small></div>
+<table style="margin-top:12px"><tr><th>Likely causes</th></tr><tr><td>GitHub skipped the scheduled trigger · schedule disabled after 60 days idle · workflow failing before the tests start</td></tr></table>
+<a class="btn">Open Actions tab / run now</a>
+<p class="note">Also fires when a run is green but tested nothing (e.g. browser failed to install), and when the day's one real test lead didn't happen.</p></div></div>
+
+<span class="label">Also changing</span>
+<div class="mail"><div class="body" style="font-size:13px">
+<b>Dashboard:</b> adds a "new vs known" toggle, per-form load-time trend lines, and the list of issues fixed this week.<br>
+<b>Notion page per run:</b> unchanged structure, with a "New / Known / Fixed" section at the top and failure screenshots.<br>
+<b>Retries:</b> a failed check is retried once before it counts, so one-off blips don't page you.</div></div>
+</div></body></html>

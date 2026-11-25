@@ -1,0 +1,27 @@
+name: Weekly Digest
+
+on:
+  schedule:
+    - cron: '30 3 * * 1'   # Monday 9:00 AM IST
+  workflow_dispatch: {}
+
+jobs:
+  digest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npx tsx src/weekly-digest.ts
+      - name: Email weekly accessibility digest
+        run: python3 scripts/send_weekly_digest.py
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: edwerd@kenresearch.com

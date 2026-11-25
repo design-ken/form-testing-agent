@@ -1,0 +1,27 @@
+name: Watchdog
+
+on:
+  schedule:
+    - cron: '0 4,17 * * *'   # 9:30 AM and 10:30 PM IST — independent of the test schedule
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npx tsx src/watchdog.ts
+      - name: Email alert if something is silently wrong
+        run: python3 scripts/send_watchdog_alert.py
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: edwerd@kenresearch.com

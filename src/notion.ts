@@ -179,6 +179,21 @@ function buildPageContent(summary: RunSummary): NotionBlock[] {
     )
   );
 
+  // What changed vs history: new / known / fixed, then any urgent failures first.
+  if (summary.issueDelta) {
+    const d = summary.issueDelta;
+    blocks.push(heading2('What changed'));
+    blocks.push(bulletItem(`New this run: ${d.newCount}`));
+    blocks.push(bulletItem(`Known (unchanged): ${d.knownCount}`));
+    blocks.push(bulletItem(`Fixed since last run: ${d.fixed.length}`));
+    for (const f of d.fixed.slice(0, 10)) blocks.push(bulletItem(`✔ Fixed: ${f.formName} — ${f.description}`));
+    const urgent = (summary.consolidatedIssues ?? []).filter((x) => x.urgent);
+    if (urgent.length) {
+      blocks.push(heading2('🔴 Needs action now'));
+      for (const u of urgent) blocks.push(bulletItem(`${u.formName} (${u.affectedDevices.join(', ')}): ${u.description}`));
+    }
+  }
+
   // Add per-form timing if available
   if (summary.formMetrics && summary.formMetrics.length > 0) {
     blocks.push(heading2('Test Duration per Form'));
