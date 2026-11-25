@@ -183,7 +183,47 @@ def coverage_table(summary):
           <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;text-align:right;">{mark}</td></tr>"""
     head = "".join(f'<th style="text-align:{a};font-size:11px;color:#64748b;padding:6px 10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{h}</th>' for h, a in [("Device \u00b7 browser", "left"), ("Passed", "right"), ("At risk", "right"), ("Result", "right")])
     note = '<div style="font-size:11px;color:#64748b;margin-top:6px;">Emulated devices on a test server (real user agent, screen size, touch). Not physical phones; the on-screen keyboard is not simulated.</div>'
-    return f'<table style="width:100%;border-collapse:collapse;{FONT}"><tr>{head}</tr>{rows}</table>{note}'
+    return f'<table style="width:100%;border-collapse:collapse;{FONT}"><tr>{head}</tr>{rows}</table>{note}{failing_html(summary)}'
+
+
+AXE_FRIENDLY = {
+    "button-name": "Buttons without a readable name",
+    "color-contrast": "Low text colour contrast",
+    "link-in-text-block": "Links not distinguishable from surrounding text",
+}
+
+
+def failing_checks(summary):
+    """Group failing/errored results by check so the report says WHAT failed, not just how many."""
+    import re
+    groups = {}
+    for r in summary.get("results") or []:
+        if r.get("status") not in ("fail", "error"):
+            continue
+        desc = str(r.get("description", ""))
+        m = re.match(r"\[axe-core\]\s*([\w-]+)", desc)
+        label = AXE_FRIENDLY.get(m.group(1), m.group(1)) if m else re.sub(r"\s*\(\d+ element\(s\) affected\)", "", desc)[:110]
+        g = groups.setdefault((r.get("category", ""), label), {"forms": set(), "targets": set()})
+        g["forms"].add(r.get("formName"))
+        g["targets"].add(r.get("target") or r.get("device"))
+    return groups
+
+
+def failing_html(summary):
+    groups = failing_checks(summary)
+    if not groups:
+        return ""
+    rows = ""
+    for (cat, label), g in sorted(groups.items(), key=lambda kv: -len(kv[1]["forms"]) * len(kv[1]["targets"])):
+        forms = [f for f in FORMS if f in g["forms"]] + sorted(g["forms"] - set(FORMS), key=str)
+        tg = sorted(g["targets"], key=str)
+        tlabel = "all 5 targets" if len(tg) == 5 else ", ".join(tg)
+        rows += f"""<tr>
+          <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;"><b>{esc(label)}</b><div style="font-size:11px;color:#64748b;">{esc(cat)}</div></td>
+          <td style="padding:7px 10px;font-size:12px;border-bottom:1px solid #e2e8f0;">{esc(", ".join(str(f) for f in forms))}</td>
+          <td style="padding:7px 10px;font-size:12px;border-bottom:1px solid #e2e8f0;">{esc(tlabel)}</td></tr>"""
+    head = "".join(f'<th style="text-align:left;font-size:11px;color:#64748b;padding:6px 10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{h}</th>' for h in ("What failed", "Forms", "Seen on"))
+    return f'<div style="font-size:12px;color:#64748b;margin:12px 0 6px;">What the "fail" counts above are:</div><table style="width:100%;border-collapse:collapse;{FONT}"><tr>{head}</tr>{rows}</table>'
 
 
 def coverage_text(summary):
@@ -277,6 +317,8 @@ def build_plain_text(summary):
     cov = coverage_text(summary)
     if cov:
         lines += ["", "Devices & browsers tested:"] + cov
+        for (cat, label), g in failing_checks(summary).items():
+            lines.append(f"  FAIL: {label} ({cat}) - {', '.join(sorted(map(str, g['forms'])))}")
     notion_url = summary.get("notionPageUrl")
     lines += ["", f"Full details: {notion_url}" if notion_url else "See today's Notion page for full per-check results."]
     return "\n".join(lines)
