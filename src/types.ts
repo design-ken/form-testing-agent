@@ -31,6 +31,13 @@ export interface FormDef {
   url: string;
 }
 
+/** A cropped screenshot of the offending element, outlined, captured while the page was open. */
+export interface Evidence {
+  path: string; // local png
+  selector: string; // axe target selector (for the caption)
+  html: string; // trimmed outerHTML snippet of the element
+}
+
 export interface TestResult {
   runId: string;
   runTimestamp: string; // ISO 8601, UTC
@@ -44,6 +51,8 @@ export interface TestResult {
   severity: Severity | null;
   description: string;
   screenshotPath: string | null;
+  ruleId?: string; // axe rule id for accessibility results
+  evidence?: Evidence[]; // outlined element crops (accessibility results only)
 }
 
 export interface FormTestMetrics {
@@ -60,6 +69,8 @@ export interface ConsolidatedIssue {
   isNew?: boolean; // not seen in any run in the baseline window (see analysis.ts)
   urgent?: boolean; // functional/availability failure — revenue-critical
   confirmedOnRetry?: boolean;
+  ruleId?: string;
+  evidence?: Evidence[];
   status: Status; // pass | fail | at_risk | error
 }
 
@@ -93,5 +104,6 @@ export interface RunSummary {
   issueDelta?: IssueDelta;
   timingBaselineMs?: Record<string, number>; // 7-day average per form, for 'vs normal' in the email
   urgentScreenshots?: string[]; // paths of page screenshots for urgent failures (attached to the email)
+  includeKnownEvidence?: boolean; // first run of the IST day: attach evidence for known issues too
   notionPageUrl?: string; // URL of this run's Notion page, for linking from the email summary
 }

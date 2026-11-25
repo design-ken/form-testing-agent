@@ -1,5 +1,7 @@
 import { Client } from '@notionhq/client';
-import type { RunSummary, TestResult, Device } from './types.js';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import type { RunSummary, TestResult, ConsolidatedIssue, Evidence } from './types.js';
 
 let client: Client | null = null;
 
@@ -44,221 +46,265 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * One page per run (not one row per check) — these are the page-level
- * properties, visible as columns in the Notion database view. Per-check
- * detail (all 4 forms x 3 devices) lives in the page's block content
- * instead (see buildPageContent), keeping the database view itself scannable.
+ * One page per run. The DATABASE ROW is the at-a-glance verdict (status, urgent / new / known / fixed
+ * counts, real-lead result, per-form seconds). The PAGE reads top-down: verdict, what needs action,
+ * what is new (with evidence screenshots), what is fixed, device coverage, speed, then everything
+ * else collapsed (known issues, full per-check log).
  */
 const FIELD_NAMES = {
   title: 'Name',
   status: 'Status',
+  urgent: 'Urgent',
+  newIssues: 'New issues',
+  known: 'Known issues',
+  fixed: 'Fixed',
+  formsHealthy: 'Forms healthy',
+  realLead: 'Real test lead',
   failed: 'Failed',
   atRisk: 'At Risk',
   errored: 'Errored',
   testType: 'Test Type',
   dateTime: 'Date',
-  sampleReportTime: 'Sample Report Time (ms)',
-  customFormTime: 'Custom Form Time (ms)',
-  talkToUsTime: 'Talk to Us Time (ms)',
-  discoveryCallTime: 'Book a Discovery Call Time (ms)',
+  sampleReportTime: 'Sample Report Time (s)',
+  customFormTime: 'Custom Form Time (s)',
+  talkToUsTime: 'Talk to Us Time (s)',
+  discoveryCallTime: 'Book a Discovery Call Time (s)',
 };
 
 const TEST_TYPE_VALUE = 'Lead Form';
-const STATUS_ICON: Record<TestResult['status'], string> = {
-  pass: '✅',
-  fail: '🚩',
-  at_risk: '⚠️',
-  error: '❌',
+const FORM_NAMES = ['Sample Report', 'Custom Form', 'Talk to Us', 'Book a Discovery Call'];
+const STATUS_ICON: Record<TestResult['status'], string> = { pass: '✅', fail: '🚩', at_risk: '⚠️', error: '❌' };
+
+// Plain-language names and fixes for the axe rules this site keeps hitting.
+const RULES: Record<string, { label: string; fix: string }> = {
+  'button-name': { label: 'Buttons without a readable name', fix: 'Add an aria-label (or visible text) to each icon-only button.' },
+  'color-contrast': { label: 'Low text colour contrast', fix: 'Darken the text (or lighten the background) to at least 4.5:1 contrast.' },
+  'link-in-text-block': { label: 'Links not distinguishable from surrounding text', fix: 'Underline in-paragraph links, or give them a 3:1 colour difference.' },
+  'landmark-one-main': { label: 'No <main> landmark', fix: 'Wrap the primary page content in a <main> element.' },
+  'page-has-heading-one': { label: 'No H1 heading', fix: 'Add exactly one H1 that describes the page.' },
+  'heading-order': { label: 'Headings skip a level', fix: 'Use heading levels in order (H1 → H2 → H3) without skipping.' },
+  region: { label: 'Content outside page landmarks', fix: 'Place all visible content inside landmarks such as header, main, footer.' },
 };
 
-function overallStatus(summary: RunSummary): string {
-  if (summary.runFailed) return 'Run Failed';
-  if (summary.totalFail > 0 || summary.totalError > 0 || summary.totalAtRisk > 0) return 'Issues Found';
-  return 'All Passed';
+function ruleOf(issue: ConsolidatedIssue): { label: string; fix?: string } {
+  const id = issue.ruleId ?? /^\[axe-core\]\s*([\w-]+)/.exec(issue.description)?.[1];
+  if (id && RULES[id]) return RULES[id];
+  return { label: issue.description.replace(/^\[axe-core\]\s*/, '').replace(/\s*\(\d+ element\(s\) affected\)/, '').slice(0, 110) };
+}
+
+function realLeadOf(summary: RunSummary): string {
+  const r = summary.results.find((x) => x.description.startsWith('Valid submission'));
+  if (!r) return 'Not today';
+  return r.status === 'pass' ? 'Submitted ✔' : 'No confirmation ✖';
+}
+
+function verdict(summary: RunSummary): { status: string; headline: string; icon: string } {
+  const issues = summary.consolidatedIssues ?? [];
+  const urgent = issues.filter((i) => i.urgent);
+  const fresh = issues.filter((i) => i.isNew && !i.urgent);
+  if (summary.runFailed) return { status: '⚠️ Run failed', headline: 'run failed — nothing was tested', icon: '⚠️' };
+  if (urgent.length) {
+    const forms = [...new Set(urgent.map((u) => u.formName))].join(', ');
+    return { status: '🔴 Urgent', headline: `URGENT — ${forms} can't submit`, icon: '🔴' };
+  }
+  if (fresh.length) return { status: '🟡 New issues', headline: `${fresh.length} new issue${fresh.length > 1 ? 's' : ''}`, icon: '🟡' };
+  return { status: '🟢 Healthy', headline: 'all forms working', icon: '🟢' };
 }
 
 function buildTitle(summary: RunSummary): string {
-  const date = new Date(summary.runTimestamp);
-  const formatted = date.toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    dateStyle: 'medium',
-    timeStyle: 'short',
+  const when = new Date(summary.runTimestamp).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true,
   });
-  return `Lead Form Tester — ${formatted}`;
+  return `${when} — ${verdict(summary).headline}`;
 }
 
 function buildProperties(summary: RunSummary): Record<string, unknown> {
+  const v = verdict(summary);
+  const issues = summary.consolidatedIssues ?? [];
+  const urgentForms = new Set(issues.filter((i) => i.urgent).map((i) => i.formName));
   const props: Record<string, unknown> = {
-    [FIELD_NAMES.title]: {
-      title: [{ text: { content: buildTitle(summary) } }],
-    },
-    [FIELD_NAMES.status]: { select: { name: overallStatus(summary) } },
+    [FIELD_NAMES.title]: { title: [{ text: { content: buildTitle(summary) } }] },
+    [FIELD_NAMES.status]: { select: { name: v.status } },
+    [FIELD_NAMES.urgent]: { number: issues.filter((i) => i.urgent).length },
+    [FIELD_NAMES.newIssues]: { number: summary.issueDelta?.newCount ?? 0 },
+    [FIELD_NAMES.known]: { number: summary.issueDelta?.knownCount ?? 0 },
+    [FIELD_NAMES.fixed]: { number: summary.issueDelta?.fixed.length ?? 0 },
+    [FIELD_NAMES.formsHealthy]: { rich_text: [{ text: { content: `${FORM_NAMES.length - urgentForms.size} / ${FORM_NAMES.length}` } }] },
+    [FIELD_NAMES.realLead]: { select: { name: realLeadOf(summary) } },
     [FIELD_NAMES.failed]: { number: summary.totalFail },
     [FIELD_NAMES.atRisk]: { number: summary.totalAtRisk },
     [FIELD_NAMES.errored]: { number: summary.totalError },
     [FIELD_NAMES.testType]: { select: { name: TEST_TYPE_VALUE } },
     [FIELD_NAMES.dateTime]: { date: { start: summary.runTimestamp } },
   };
-
-  // Add per-form timing if available (converted to seconds for readability)
-  if (summary.formMetrics) {
-    for (const metric of summary.formMetrics) {
-      const seconds = Math.round(metric.durationMs / 1000 * 100) / 100; // 2 decimal places
-      if (metric.formName === 'Sample Report') {
-        props[FIELD_NAMES.sampleReportTime] = { number: seconds };
-      } else if (metric.formName === 'Custom Form') {
-        props[FIELD_NAMES.customFormTime] = { number: seconds };
-      } else if (metric.formName === 'Talk to Us') {
-        props[FIELD_NAMES.talkToUsTime] = { number: seconds };
-      } else if (metric.formName === 'Book a Discovery Call') {
-        props[FIELD_NAMES.discoveryCallTime] = { number: seconds };
-      }
-    }
+  const timeField: Record<string, string> = {
+    'Sample Report': FIELD_NAMES.sampleReportTime,
+    'Custom Form': FIELD_NAMES.customFormTime,
+    'Talk to Us': FIELD_NAMES.talkToUsTime,
+    'Book a Discovery Call': FIELD_NAMES.discoveryCallTime,
+  };
+  for (const m of summary.formMetrics ?? []) {
+    if (timeField[m.formName]) props[timeField[m.formName]] = { number: Math.round((m.durationMs / 1000) * 10) / 10 };
   }
-
   return props;
 }
 
-// Notion block content has hard limits: max 100 blocks per API call, and
-// max 2000 characters per rich_text content string — both enforced live by
-// the API, not just documented. Long descriptions get truncated defensively;
-// callers batch block arrays into chunks of BLOCK_BATCH_SIZE.
+// ---- block helpers (Notion limits: 100 blocks/call, 2000 chars per rich_text) ----
 const MAX_RICH_TEXT_LENGTH = 2000;
-const BLOCK_BATCH_SIZE = 90; // stay under Notion's 100-block-per-call limit with headroom
+const BLOCK_BATCH_SIZE = 90;
+const truncate = (t: string) => (t.length > MAX_RICH_TEXT_LENGTH ? t.slice(0, MAX_RICH_TEXT_LENGTH - 1) + '…' : t);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type NotionBlock = any;
+const rt = (t: string, bold = false) => ({ type: 'text', text: { content: truncate(t) }, ...(bold ? { annotations: { bold: true } } : {}) });
+const heading2 = (t: string): NotionBlock => ({ object: 'block', type: 'heading_2', heading_2: { rich_text: [rt(t)] } });
+const heading3 = (t: string): NotionBlock => ({ object: 'block', type: 'heading_3', heading_3: { rich_text: [rt(t)] } });
+const paragraph = (t: string): NotionBlock => ({ object: 'block', type: 'paragraph', paragraph: { rich_text: [rt(t)] } });
+const bullet = (t: string): NotionBlock => ({ object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: [rt(t)] } });
+const callout = (icon: string, t: string, color = 'gray_background'): NotionBlock => ({
+  object: 'block', type: 'callout', callout: { rich_text: [rt(t, true)], icon: { type: 'emoji', emoji: icon }, color },
+});
+const toggle = (title: string, children: NotionBlock[]): NotionBlock => ({
+  object: 'block', type: 'toggle', toggle: { rich_text: [rt(title, true)], children: children.slice(0, 95) },
+});
+const table = (header: string[], rows: string[][]): NotionBlock => ({
+  object: 'block', type: 'table',
+  table: {
+    table_width: header.length, has_column_header: true, has_row_header: false,
+    children: [header, ...rows].map((cells) => ({ object: 'block', type: 'table_row', table_row: { cells: cells.map((c) => [rt(c)]) } })),
+  },
+});
 
-function truncate(text: string): string {
-  return text.length > MAX_RICH_TEXT_LENGTH ? text.slice(0, MAX_RICH_TEXT_LENGTH - 1) + '…' : text;
+/** Uploads an evidence crop to Notion (no public hosting needed). Returns an image block, or null on any failure. */
+async function imageBlock(ev: Evidence, caption: string): Promise<NotionBlock | null> {
+  try {
+    const data = new Blob([await readFile(ev.path)], { type: 'image/png' });
+    const up = await getClient().fileUploads.create({ mode: 'single_part', filename: path.basename(ev.path), content_type: 'image/png' } as never);
+    await getClient().fileUploads.send({ file_upload_id: up.id, file: { data, filename: path.basename(ev.path) } } as never);
+    await sleep(250);
+    return { object: 'block', type: 'image', image: { type: 'file_upload', file_upload: { id: up.id }, caption: [rt(caption)] } };
+  } catch (err) {
+    console.error('[notion] Evidence upload failed (skipping image):', (err as Error).message);
+    return null;
+  }
 }
 
-function heading2(text: string) {
-  return {
-    object: 'block' as const,
-    type: 'heading_2' as const,
-    heading_2: { rich_text: [{ type: 'text' as const, text: { content: truncate(text) } }] },
-  };
+async function issueBlocks(issue: ConsolidatedIssue, withEvidence: boolean): Promise<NotionBlock[]> {
+  const r = ruleOf(issue);
+  const sev = issue.severity ? ` [${issue.severity.toUpperCase()}]` : '';
+  const blocks: NotionBlock[] = [heading3(`${STATUS_ICON[issue.status === 'fail' ? 'fail' : 'at_risk']} ${r.label} — ${issue.formName}${sev}`)];
+  blocks.push(bullet(`Seen on: ${issue.affectedDevices.length >= 5 ? 'all 5 targets' : issue.affectedDevices.join(', ')}`));
+  if (r.fix) blocks.push(bullet(`Fix: ${r.fix}`));
+  if (issue.urgent) blocks.push(bullet(issue.description));
+  if (withEvidence) {
+    for (const ev of (issue.evidence ?? []).slice(0, 2)) {
+      const img = await imageBlock(ev, `${issue.formName} · ${ev.selector}${ev.html ? ' — ' + ev.html : ''}`);
+      if (img) blocks.push(img);
+    }
+  }
+  return blocks;
 }
 
-function heading3(text: string) {
-  return {
-    object: 'block' as const,
-    type: 'heading_3' as const,
-    heading_3: { rich_text: [{ type: 'text' as const, text: { content: truncate(text) } }] },
-  };
+function coverageTable(summary: RunSummary): NotionBlock {
+  const order = ['Desktop · Chrome', 'Desktop · Firefox', 'iPad · Safari', 'iPhone 15 · Safari', 'Pixel 7 · Chrome'];
+  const counts = new Map<string, { pass: number; risk: number; bad: number }>();
+  for (const r of summary.results) {
+    const t = r.target ?? r.device;
+    const c = counts.get(t) ?? { pass: 0, risk: 0, bad: 0 };
+    if (r.status === 'pass') c.pass++; else if (r.status === 'at_risk') c.risk++; else c.bad++;
+    counts.set(t, c);
+  }
+  const names = [...order.filter((n) => counts.has(n)), ...[...counts.keys()].filter((n) => !order.includes(n))];
+  return table(['Device · browser', 'Passed', 'At risk', 'Failed'], names.map((n) => {
+    const c = counts.get(n)!;
+    return [n, String(c.pass), String(c.risk), c.bad ? `${c.bad}` : '0'];
+  }));
 }
 
-function bulletItem(text: string) {
-  return {
-    object: 'block' as const,
-    type: 'bulleted_list_item' as const,
-    bulleted_list_item: { rich_text: [{ type: 'text' as const, text: { content: truncate(text) } }] },
-  };
-}
-
-function paragraph(text: string) {
-  return {
-    object: 'block' as const,
-    type: 'paragraph' as const,
-    paragraph: { rich_text: [{ type: 'text' as const, text: { content: truncate(text) } }] },
-  };
-}
-
-/**
- * Builds the full report as Notion blocks: a run-level summary, then one
- * heading per form, one sub-heading per device, and one bullet per check
- * result — grouped so the page reads like a structured report rather than
- * a flat dump of 138 rows.
- */
-type NotionBlock = ReturnType<typeof paragraph | typeof heading2 | typeof heading3 | typeof bulletItem>;
-
-function buildPageContent(summary: RunSummary): NotionBlock[] {
+async function buildPageContent(summary: RunSummary): Promise<NotionBlock[]> {
   const blocks: NotionBlock[] = [];
-
-  blocks.push(
-    paragraph(
-      `${summary.totalPass} passed · ${summary.totalFail} failed · ${summary.totalAtRisk} at risk · ${summary.totalError} errored`
-    )
-  );
-
-  // What changed vs history: new / known / fixed, then any urgent failures first.
-  if (summary.issueDelta) {
-    const d = summary.issueDelta;
-    blocks.push(heading2('What changed'));
-    blocks.push(bulletItem(`New this run: ${d.newCount}`));
-    blocks.push(bulletItem(`Known (unchanged): ${d.knownCount}`));
-    blocks.push(bulletItem(`Fixed since last run: ${d.fixed.length}`));
-    for (const f of d.fixed.slice(0, 10)) blocks.push(bulletItem(`✔ Fixed: ${f.formName} — ${f.description}`));
-    const urgent = (summary.consolidatedIssues ?? []).filter((x) => x.urgent);
-    if (urgent.length) {
-      blocks.push(heading2('🔴 Needs action now'));
-      for (const u of urgent) blocks.push(bulletItem(`${u.formName} (${u.affectedDevices.join(', ')}): ${u.description}`));
-    }
-  }
-
-  // Add per-form timing if available
-  if (summary.formMetrics && summary.formMetrics.length > 0) {
-    blocks.push(heading2('Test Duration per Form'));
-    for (const metric of summary.formMetrics) {
-      blocks.push(bulletItem(`${metric.formName}: ${(metric.durationMs / 1000).toFixed(2)}s`));
-    }
-  }
+  const v = verdict(summary);
+  const issues = summary.consolidatedIssues ?? [];
+  const delta = summary.issueDelta;
 
   if (summary.runFailed) {
-    blocks.push(paragraph(`⚠️ Run failed to complete: ${summary.runFailureReason ?? 'unknown error'}`));
+    blocks.push(callout('⚠️', `Run failed to complete: ${summary.runFailureReason ?? 'unknown error'}`, 'red_background'));
     return blocks;
   }
 
-  // Add consolidated issues list if there are any failures/at-risk
-  if (summary.consolidatedIssues && summary.consolidatedIssues.length > 0) {
-    blocks.push(heading2('Issues to Fix'));
-    for (const issue of summary.consolidatedIssues) {
-      const devices = issue.affectedDevices.join(', ');
-      const severityTag = issue.severity ? ` [${issue.severity.toUpperCase()}]` : '';
-      blocks.push(
-        bulletItem(
-          `${STATUS_ICON[issue.status === 'fail' ? 'fail' : 'at_risk']} ${issue.formName} (${issue.category})${severityTag} — ${issue.description} (affected: ${devices})`
-        )
-      );
-    }
+  const color = v.icon === '🔴' ? 'red_background' : v.icon === '🟡' ? 'yellow_background' : 'green_background';
+  blocks.push(callout(v.icon, `${v.headline[0].toUpperCase()}${v.headline.slice(1)} · ${delta?.newCount ?? 0} new · ${delta?.knownCount ?? 0} known · ${delta?.fixed.length ?? 0} fixed`, color));
+  blocks.push(paragraph(`Real test lead: ${realLeadOf(summary)}. ${summary.totalPass} checks passed across ${new Set(summary.results.map((r) => r.target ?? r.device)).size} devices/browsers (emulated, not physical devices).`));
+
+  const urgent = issues.filter((i) => i.urgent);
+  if (urgent.length) {
+    blocks.push(heading2('🔴 Needs action now'));
+    for (const i of urgent) blocks.push(...(await issueBlocks(i, true)));
   }
 
-  const byForm = new Map<string, TestResult[]>();
-  for (const r of summary.results) {
-    const list = byForm.get(r.formName) ?? [];
-    list.push(r);
-    byForm.set(r.formName, list);
+  const fresh = issues.filter((i) => i.isNew && !i.urgent);
+  if (fresh.length) {
+    blocks.push(heading2('🆕 New this run'));
+    for (const i of fresh) blocks.push(...(await issueBlocks(i, true)));
   }
 
-  blocks.push(heading2('Detailed Results'));
-  for (const [formName, formResults] of byForm) {
-    blocks.push(heading3(formName));
+  if (delta?.fixed.length) {
+    blocks.push(heading2('✔ Fixed since last run'));
+    for (const f of delta.fixed.slice(0, 10)) blocks.push(bullet(`${f.formName} — ${f.description.replace(/^\[axe-core\]\s*/, '').slice(0, 120)}`));
+  }
 
-    const byDevice = new Map<Device, TestResult[]>();
-    for (const r of formResults) {
-      const list = byDevice.get(r.device) ?? [];
-      list.push(r);
-      byDevice.set(r.device, list);
+  blocks.push(heading2('Devices & browsers tested'));
+  blocks.push(coverageTable(summary));
+
+  if (summary.formMetrics?.length) {
+    const base = summary.timingBaselineMs ?? {};
+    blocks.push(heading2('Speed'));
+    blocks.push(table(['Form', 'Test time', 'vs 7-day avg'], summary.formMetrics.map((m) => {
+      const b = base[m.formName];
+      return [m.formName, `${(m.durationMs / 1000).toFixed(0)}s`, b ? `${Math.round(((m.durationMs - b) / b) * 100) >= 0 ? '+' : ''}${Math.round(((m.durationMs - b) / b) * 100)}%` : '—'];
+    })));
+  }
+
+  // Known issues: collapsed, grouped by problem (not repeated per device). Evidence only on the day's first run.
+  const known = issues.filter((i) => !i.isNew && !i.urgent);
+  if (known.length) {
+    const groups = new Map<string, { label: string; fix?: string; forms: Map<string, ConsolidatedIssue> }>();
+    for (const i of known) {
+      const r = ruleOf(i);
+      const g = groups.get(r.label) ?? { label: r.label, fix: r.fix, forms: new Map() };
+      if (!g.forms.has(i.formName) || (i.evidence?.length && !g.forms.get(i.formName)!.evidence?.length)) g.forms.set(i.formName, i);
+      groups.set(r.label, g);
     }
-
-    const deviceOrder: Device[] = ['desktop', 'tablet', 'mobile'];
-    for (const device of deviceOrder) {
-      const deviceResults = byDevice.get(device);
-      if (!deviceResults) continue;
-
-      blocks.push(heading3(device.charAt(0).toUpperCase() + device.slice(1)));
-      for (const r of deviceResults) {
-        blocks.push(bulletItem(`${STATUS_ICON[r.status]} ${r.description}`));
+    const children: NotionBlock[] = [];
+    for (const g of groups.values()) {
+      children.push(bullet(`${g.label} — ${[...g.forms.keys()].join(', ')}${g.fix ? `. Fix: ${g.fix}` : ''}`));
+      if (summary.includeKnownEvidence) {
+        for (const issue of g.forms.values()) {
+          const ev = issue.evidence?.[0];
+          if (ev) { const img = await imageBlock(ev, `${issue.formName} · ${ev.selector}`); if (img) children.push(img); }
+        }
       }
     }
+    blocks.push(toggle(`Known issues (${known.length}) — unchanged, already tracked`, children));
   }
 
+  // Full per-check log: one collapsed toggle per form, every check on every target.
+  blocks.push(heading2('Full per-check log'));
+  for (const form of FORM_NAMES) {
+    const rows = summary.results.filter((r) => r.formName === form);
+    if (!rows.length) continue;
+    const byTarget = new Map<string, TestResult[]>();
+    for (const r of rows) byTarget.set(r.target ?? r.device, [...(byTarget.get(r.target ?? r.device) ?? []), r]);
+    const children: NotionBlock[] = [];
+    for (const [t, rs] of byTarget) {
+      children.push(bullet(`${t}: ${rs.filter((r) => r.status === 'pass').length} passed` + rs.filter((r) => r.status !== 'pass').map((r) => `\n${STATUS_ICON[r.status]} ${r.description.replace(/^\[axe-core\]\s*/, '')}`).join('')));
+    }
+    blocks.push(toggle(form, children));
+  }
   return blocks;
 }
 
 /**
- * Writes one page per run (not one row per check), with the full 4-forms x
- * 3-devices breakdown as structured block content inside that page.
- * Retries once on failure. Never throws — caller treats Notion failure as
- * non-fatal.
+ * Writes one page per run. Retries once on failure. Never throws — the caller treats a Notion failure as non-fatal.
  */
 export async function writeRunSummary(
   summary: RunSummary
@@ -270,25 +316,21 @@ export async function writeRunSummary(
       properties: buildProperties(summary) as never,
     });
 
-    const blocks = buildPageContent(summary);
+    const blocks = await buildPageContent(summary);
     for (let i = 0; i < blocks.length; i += BLOCK_BATCH_SIZE) {
-      const batch = blocks.slice(i, i + BLOCK_BATCH_SIZE);
-      await getClient().blocks.children.append({ block_id: page.id, children: batch as never });
-      if (i + BLOCK_BATCH_SIZE < blocks.length) await sleep(350); // ~3 req/sec ceiling
+      await getClient().blocks.children.append({ block_id: page.id, children: blocks.slice(i, i + BLOCK_BATCH_SIZE) as never });
+      if (i + BLOCK_BATCH_SIZE < blocks.length) await sleep(350);
     }
-
     return (page as { url?: string }).url;
   };
 
   try {
-    const pageUrl = await attempt();
-    return { ok: true, pageUrl };
+    return { ok: true, pageUrl: await attempt() };
   } catch (firstErr) {
     console.error('[notion] First write attempt failed, retrying in 2s:', (firstErr as Error).message);
     await sleep(2000);
     try {
-      const pageUrl = await attempt();
-      return { ok: true, pageUrl };
+      return { ok: true, pageUrl: await attempt() };
     } catch (secondErr) {
       const message = (secondErr as Error).message;
       console.error('[notion] Retry also failed:', message);

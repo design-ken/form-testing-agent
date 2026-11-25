@@ -202,6 +202,10 @@ async function runAllTests(): Promise<RunSummary> {
   // History comparisons must run BEFORE this run is written, so "known"
   // never includes the run itself.
   const { delta, newKeys } = computeDelta(getDb(), allResults);
+  // First run of the IST day? Then known issues also get their evidence refreshed in Notion.
+  const includeKnownEvidence = !getDb()
+    .prepare(`SELECT 1 FROM test_runs WHERE date(run_timestamp,'+330 minutes') = date('now','+330 minutes') LIMIT 1`)
+    .get();
   const timingBaselineMs = getTimingBaseline();
   const dbOutcome = insertResults(allResults);
 
@@ -225,6 +229,8 @@ async function runAllTests(): Promise<RunSummary> {
   }
 
   const consolidatedIssues = Array.from(issuesByDesc.values()).map((results) => ({
+    ruleId: results.find((r) => r.ruleId)?.ruleId,
+    evidence: results.find((r) => r.evidence?.length)?.evidence,
     formName: results[0].formName,
     category: results[0].category,
     description: results[0].description,
@@ -258,6 +264,7 @@ async function runAllTests(): Promise<RunSummary> {
     runFailed: allResults.length > 0 && !allResults.some((r) => r.status === 'pass'),
     runFailureReason: allResults.some((r) => r.status === 'pass') ? undefined : 'No check passed in this run — the browser likely failed to start, so nothing was actually tested.',
     issueDelta: delta,
+    includeKnownEvidence,
     timingBaselineMs,
     urgentScreenshots,
     dbWriteFailed: !dbOutcome.ok,
