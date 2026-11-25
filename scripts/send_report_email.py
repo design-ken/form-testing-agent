@@ -152,6 +152,49 @@ def timing_table(summary, urgent):
     return f'<table style="width:100%;border-collapse:collapse;{FONT}"><tr>{head}</tr>{rows}</table>'
 
 
+TARGET_ORDER = [
+    ("Desktop \u00b7 Chrome", "Windows/Mac laptop, 1440\u00d7900"),
+    ("Desktop \u00b7 Firefox", "Windows/Mac laptop, 1440\u00d7900"),
+    ("iPad \u00b7 Safari", "iPad (gen 7), Safari engine, 810\u00d71080, touch"),
+    ("iPhone 15 \u00b7 Safari", "iPhone 15, Safari engine, 393\u00d7659, touch"),
+    ("Pixel 7 \u00b7 Chrome", "Pixel 7, Chrome, 412\u00d7839, touch"),
+]
+
+
+def coverage_table(summary):
+    counts = {}
+    for r in summary.get("results") or []:
+        t = r.get("target") or r.get("device") or "unknown"
+        c = counts.setdefault(t, {"pass": 0, "fail": 0, "at_risk": 0, "error": 0})
+        c[r.get("status", "error")] = c.get(r.get("status", "error"), 0) + 1
+    if not counts:
+        return ""
+    names = [t for t, _ in TARGET_ORDER if t in counts] + [t for t in counts if t not in dict(TARGET_ORDER)]
+    desc = dict(TARGET_ORDER)
+    rows = ""
+    for t in names:
+        c = counts[t]
+        bad = c["fail"] + c["error"]
+        mark = '<span style="color:#dc2626;font-weight:700;">%d fail</span>' % bad if bad else '<span style="color:#16a34a;font-weight:700;">OK</span>'
+        rows += f"""<tr>
+          <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;"><b>{esc(t)}</b><div style="font-size:11px;color:#64748b;">{esc(desc.get(t, ""))}</div></td>
+          <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;text-align:right;">{c["pass"]}</td>
+          <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;text-align:right;">{c["at_risk"]}</td>
+          <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;text-align:right;">{mark}</td></tr>"""
+    head = "".join(f'<th style="text-align:{a};font-size:11px;color:#64748b;padding:6px 10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{h}</th>' for h, a in [("Device \u00b7 browser", "left"), ("Passed", "right"), ("At risk", "right"), ("Result", "right")])
+    note = '<div style="font-size:11px;color:#64748b;margin-top:6px;">Emulated devices on a test server (real user agent, screen size, touch). Not physical phones; the on-screen keyboard is not simulated.</div>'
+    return f'<table style="width:100%;border-collapse:collapse;{FONT}"><tr>{head}</tr>{rows}</table>{note}'
+
+
+def coverage_text(summary):
+    counts = {}
+    for r in summary.get("results") or []:
+        t = r.get("target") or r.get("device") or "unknown"
+        c = counts.setdefault(t, [0, 0])
+        c[0 if r.get("status") == "pass" else 1] += 1
+    return [f"  {t}: {c[0]} passed, {c[1]} not passing" for t, c in counts.items()]
+
+
 def section(title, inner):
     return f'<div style="padding:4px 20px 14px 20px;{FONT}"><div style="font-size:13px;font-weight:700;color:#1e293b;margin:10px 0 8px;">{title}</div>{inner}</div>'
 
@@ -199,6 +242,9 @@ def build_html(summary):
         parts.append(f'<div style="padding:0 20px 8px;font-size:12px;color:#64748b;{FONT}">Plus {known} known issue(s) unchanged since earlier runs (not repeated here).</div>')
 
     parts.append(section("Submit health & speed", timing_table(summary, urgent)))
+    cov = coverage_table(summary)
+    if cov:
+        parts.append(section("Devices &amp; browsers tested", cov))
 
     notion_url = summary.get("notionPageUrl")
     link = f'<a href="{notion_url}" style="font-size:13px;color:#2563eb;text-decoration:none;font-weight:600;">View full per-check results in Notion &rarr;</a>' if notion_url else '<span style="font-size:13px;color:#64748b;">See today\'s Notion page for full per-check results.</span>'
@@ -228,6 +274,9 @@ def build_plain_text(summary):
     for label, group in (("NEEDS ACTION NOW", urgent), ("NEW", new_other)):
         for i in group:
             lines.append(f"- [{label}] {i.get('formName')} ({i.get('category')}): {i.get('description')} (affected: {', '.join(i.get('affectedDevices') or [])})")
+    cov = coverage_text(summary)
+    if cov:
+        lines += ["", "Devices & browsers tested:"] + cov
     notion_url = summary.get("notionPageUrl")
     lines += ["", f"Full details: {notion_url}" if notion_url else "See today's Notion page for full per-check results."]
     return "\n".join(lines)
