@@ -174,7 +174,15 @@ async function runAllTests(): Promise<RunSummary> {
   const winningFormIndex = Math.floor(Math.random() * FORMS.length);
   // Chosen by unique target LABEL, not device class: two targets share the 'mobile' class,
   // and matching on class would submit twice and break the 1-lead-per-day cap.
-  const winningTarget = VIEWPORTS[Math.floor(Math.random() * VIEWPORTS.length)].label;
+  // Edge needs a separate optional install in CI; if it isn't there, skip that target (loudly) rather than error every form.
+  const activeViewports = VIEWPORTS.filter((v) => {
+    if (v.browser === 'msedge' && !process.env.EDGE_INSTALLED && !process.env.ALLOW_MISSING_EDGE_CHECK) {
+      console.error(`[run] Skipping target "${v.label}": Microsoft Edge is not installed on this runner.`);
+      return false;
+    }
+    return true;
+  });
+  const winningTarget = activeViewports[Math.floor(Math.random() * activeViewports.length)].label;
 
   for (const [formIndex, form] of FORMS.entries()) {
     const formStartTime = Date.now();
@@ -200,7 +208,7 @@ async function runAllTests(): Promise<RunSummary> {
       formResults.push(...results);
     };
     // Small worker pool: 2 targets at a time keeps a 10-target run near 12 minutes without starving the runner.
-    const queue = [...VIEWPORTS];
+    const queue = [...activeViewports];
     await Promise.all(
       Array.from({ length: TARGET_CONCURRENCY }, async () => {
         for (let v = queue.shift(); v; v = queue.shift()) await runViewport(v);

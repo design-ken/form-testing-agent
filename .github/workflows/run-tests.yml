@@ -51,14 +51,23 @@ jobs:
       - run: npm ci
 
       - name: Install Playwright Chromium (with retry)
+        timeout-minutes: 10
         run: |
           ok=0
           for attempt in 1 2 3; do
-            if npx playwright install --with-deps chromium webkit firefox msedge; then ok=1; break; fi
+            if npx playwright install --with-deps chromium webkit firefox; then ok=1; break; fi
             echo "Attempt $attempt failed, retrying in 10s..."
             sleep 10
           done
           if [ "$ok" != "1" ]; then echo "Playwright Chromium install failed after 3 attempts"; exit 1; fi
+
+      # Real Microsoft Edge. Kept separate and non-fatal: if this install hangs or fails, the run
+      # still tests every other target and simply skips the Edge one (EDGE_INSTALLED stays unset).
+      - name: Install Microsoft Edge (optional)
+        timeout-minutes: 8
+        continue-on-error: true
+        run: |
+          if timeout 420 npx playwright install msedge; then echo "EDGE_INSTALLED=1" >> "$GITHUB_ENV"; else echo "Edge install failed or timed out - Edge target will be skipped"; fi
 
       - run: npm run test:forms
         env:
