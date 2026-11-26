@@ -51,11 +51,12 @@ jobs:
       - run: npm ci
 
       - name: Install Playwright Chromium (with retry)
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
           ok=0
           for attempt in 1 2 3; do
-            if npx playwright install --with-deps chromium webkit firefox; then ok=1; break; fi
+            # Per-attempt limit: a stuck apt/download (seen twice) must be retried, not wait out the whole step.
+            if timeout 240 npx playwright install --with-deps chromium webkit firefox; then ok=1; break; fi
             echo "Attempt $attempt failed, retrying in 10s..."
             sleep 10
           done
