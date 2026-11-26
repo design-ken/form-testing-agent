@@ -96,9 +96,18 @@ function ruleOf(issue: ConsolidatedIssue): { label: string; fix?: string } {
 }
 
 function realLeadOf(summary: RunSummary): string {
-  const r = summary.results.find((x) => x.description.startsWith('Valid submission'));
-  if (!r) return 'Not today';
-  return r.status === 'pass' ? 'Submitted ✔' : 'No confirmation ✖';
+  const rs = summary.results.filter((x) => x.description.startsWith('Valid submission'));
+  if (!rs.length) return 'Not today';
+  return rs.every((x) => x.status === 'pass') ? 'Submitted ✔' : 'No confirmation ✖';
+}
+
+function realLeadText(summary: RunSummary): string {
+  const rs = summary.results.filter((x) => x.description.startsWith('Valid submission'));
+  const l = summary.realLeads;
+  if (!rs.length) return `Real test leads: none this run${l ? ` (${l.today} of ${l.cap} done today)` : ''}.`;
+  const ok = rs.filter((x) => x.status === 'pass').length;
+  const detail = rs.map((x) => `${x.formName} / ${x.target ?? x.device} ${x.status === 'pass' ? '✔' : '✖ no confirmation'}`).join('; ');
+  return `Real test leads this run: ${rs.length} (${ok} confirmed)${l ? `, ${l.today} of ${l.cap} today` : ''} — ${detail}.`;
 }
 
 function verdict(summary: RunSummary): { status: string; headline: string; icon: string } {
@@ -238,7 +247,7 @@ async function buildPageContent(summary: RunSummary): Promise<NotionBlock[]> {
 
   const color = v.icon === '🔴' ? 'red_background' : v.icon === '🟡' ? 'yellow_background' : 'green_background';
   blocks.push(callout(v.icon, `${v.headline[0].toUpperCase()}${v.headline.slice(1)} · ${delta?.newCount ?? 0} new · ${delta?.knownCount ?? 0} known · ${delta?.fixed.length ?? 0} fixed`, color));
-  blocks.push(paragraph(`Real test lead: ${realLeadOf(summary)}. ${summary.totalPass} checks passed across ${new Set(summary.results.map((r) => r.target ?? r.device)).size} devices/browsers (emulated, not physical devices).`));
+  blocks.push(paragraph(`${realLeadText(summary)} ${summary.totalPass} checks passed across ${new Set(summary.results.map((r) => r.target ?? r.device)).size} devices/browsers (emulated, not physical devices).`));
 
   const urgent = issues.filter((i) => i.urgent);
   if (urgent.length) {

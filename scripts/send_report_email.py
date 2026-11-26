@@ -121,12 +121,14 @@ def build_issue_card(issue, tag=None):
 
 
 def lead_line(summary):
-    for r in summary.get("results") or []:
-        if str(r.get("description", "")).startswith("Valid submission"):
-            ok = r.get("status") == "pass"
-            mark = "\u2714 confirmation shown" if ok else "\u2718 no confirmation"
-            return f"Today's real test lead: {r.get('formName')} / {r.get('device')} {mark}"
-    return "No real test lead in this run (today's one lead was already sent, or this run didn't draw the slot)."
+    rs = [r for r in (summary.get("results") or []) if str(r.get("description", "")).startswith("Valid submission")]
+    l = summary.get("realLeads") or {}
+    today = f" \u00b7 {l['today']} of {l['cap']} today" if l else ""
+    if not rs:
+        return f"No real test leads in this run{today}."
+    ok = sum(1 for r in rs if r.get("status") == "pass")
+    detail = "; ".join(f"{r.get('formName')} / {r.get('target') or r.get('device')} " + ("\u2714" if r.get("status") == "pass" else "\u2718 no confirmation") for r in rs)
+    return f"Real test leads this run: {len(rs)} ({ok} confirmed){today} \u2014 {detail}"
 
 
 def timing_table(summary, urgent):

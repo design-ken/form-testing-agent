@@ -100,15 +100,32 @@ export function getLatestRunTimestamp(): Date | null {
  * to 'now' (also shifted +5:30), matching the IST convention already used
  * for display elsewhere (see notion.ts).
  */
-export function hasSubmittedToday(): boolean {
-  const row = getDb()
+/** Max real (lead-creating) test submissions per IST day, across all forms and targets. */
+export const DAILY_LEAD_CAP = 10;
+
+export interface SubmittedCombo { formName: string; target: string }
+
+/** Real submissions already recorded for today's IST date (each real submit leaves one 'Valid submission…' row, pass or fail). */
+export function submissionsToday(): SubmittedCombo[] {
+  return (getDb()
     .prepare(
-      `SELECT COUNT(*) AS cnt FROM test_runs
+      `SELECT form_name AS formName, COALESCE(target, device) AS target FROM test_runs
        WHERE description LIKE 'Valid submission%'
        AND date(run_timestamp, '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes')`
     )
-    .get() as { cnt: number };
-  return row.cnt > 0;
+    .all() as SubmittedCombo[]);
+}
+
+/** Days since each form+target combo last had a real submission (for rotating coverage). Missing = never. */
+export function daysSinceLastSubmission(): Map<string, number> {
+  const rows = getDb()
+    .prepare(
+      `SELECT form_name AS formName, COALESCE(target, device) AS target,
+              julianday('now') - julianday(MAX(run_timestamp)) AS days
+       FROM test_runs WHERE description LIKE 'Valid submission%' GROUP BY form_name, COALESCE(target, device)`
+    )
+    .all() as Array<{ formName: string; target: string; days: number }>;
+  return new Map(rows.map((r) => [`${r.formName}|${r.target}`, r.days]));
 }
 
 export function closeDb(): void {

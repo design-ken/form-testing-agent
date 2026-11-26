@@ -104,6 +104,7 @@ export interface RunSummary {
   issueDelta?: IssueDelta;
   timingBaselineMs?: Record<string, number>; // 7-day average per form, for 'vs normal' in the email
   urgentScreenshots?: string[]; // paths of page screenshots for urgent failures (attached to the email)
+  realLeads?: { thisRun: number; today: number; cap: number }; // real test submissions this run / so far today / daily cap
   includeKnownEvidence?: boolean; // first run of the IST day: attach evidence for known issues too
   notionPageUrl?: string; // URL of this run's Notion page, for linking from the email summary
 }

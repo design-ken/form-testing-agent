@@ -31,7 +31,7 @@ if (!latest) {
 }
 if (istNow.getUTCHours() >= LEAD_CHECK_AFTER_IST_HOUR) {
   const lead = db.prepare(`SELECT COUNT(*) AS n FROM test_runs WHERE description LIKE 'Valid submission%' AND date(run_timestamp, '+5 hours', '+30 minutes') = ?`).get(istDay) as { n: number };
-  if (!lead.n) reasons.push(`Today's (${istDay}) one real test lead was never submitted.`);
+  if (!lead.n) reasons.push(`No real test lead was submitted today (${istDay}); the daily real-lead quota did not run.`);
 }
 db.close();
 

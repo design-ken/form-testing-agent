@@ -6,7 +6,7 @@ import { FORMS, VIEWPORTS } from './forms.js';
 import { runFunctionalChecks } from './checks/functional.js';
 import { runLayoutChecks, dismissConsentBanner } from './checks/layout.js';
 import { runAccessibilityChecks } from './checks/accessibility.js';
-import { insertResults, closeDb, hasSubmittedToday, getDb, insertTimings, getTimingBaseline } from './db.js';
+import { insertResults, closeDb, submissionsToday, daysSinceLastSubmission, DAILY_LEAD_CAP, getDb, insertTimings, getTimingBaseline } from './db.js';
 import { computeDelta, fingerprint, isUrgent } from './analysis.js';
 import { writeRunSummary } from './notion.js';
 import { notifyBuzz } from './buzz.js';
@@ -161,20 +161,11 @@ async function runAllTests(): Promise<RunSummary> {
   const allResults: TestResult[] = [];
   const formMetrics = new Map<string, { startTime: number; endTime: number; results: TestResult[] }>();
 
-  // Cap: at most 1 real ("Valid submission...") lead per calendar day (IST),
-  // across ALL forms combined — not per form, not per run. Whichever
-  // scheduled run happens to go first each day performs the single real
-  // submission (on one randomly-chosen form+device pair); every other run
-  // that day, and every other form/device within the winning run, is tested
-  // up through locating the submit button but the button is never clicked.
-  // This replaces the earlier "1 random device per form per run" scheme
-  // (4 real submissions/run) with a stricter daily cap, per explicit
-  // request to minimize real CRM test-lead volume further.
-  const alreadySubmittedToday = hasSubmittedToday();
-  const winningFormIndex = Math.floor(Math.random() * FORMS.length);
-  // Chosen by unique target LABEL, not device class: two targets share the 'mobile' class,
-  // and matching on class would submit twice and break the 1-lead-per-day cap.
-  // Edge needs a separate optional install in CI; if it isn't there, skip that target (loudly) rather than error every form.
+  // Real-lead budget: DAILY_LEAD_CAP real submissions per IST day, across ALL forms and targets.
+  // Each run takes its share of what's left (remaining / runs still expected today), choosing
+  // random form+target combos not yet submitted today, biased toward combos not submitted for
+  // longest. Every other combo is tested up to locating the submit button, never clicked.
+  // Real-submission slots are never retried (a retry would create a second lead).
   const activeViewports = VIEWPORTS.filter((v) => {
     if (v.browser === 'msedge' && !process.env.EDGE_INSTALLED && !process.env.ALLOW_MISSING_EDGE_CHECK) {
       console.error(`[run] Skipping target "${v.label}": Microsoft Edge is not installed on this runner.`);
@@ -182,15 +173,30 @@ async function runAllTests(): Promise<RunSummary> {
     }
     return true;
   });
-  const winningTarget = activeViewports[Math.floor(Math.random() * activeViewports.length)].label;
+  const doneToday = submissionsToday();
+  const remainingToday = Math.max(0, DAILY_LEAD_CAP - doneToday.length);
+  const istHour = new Date(Date.now() + 330 * 60_000).getUTCHours();
+  const runsLeftToday = istHour < 11 ? 3 : istHour < 18 ? 2 : 1; // slots at ~5:30, 13:30, 20:30 IST (GitHub may delay them)
+  const thisRunQuota = Math.min(remainingToday, Math.ceil(remainingToday / runsLeftToday));
+  const lastDone = daysSinceLastSubmission();
+  const doneKeys = new Set(doneToday.map((c) => `${c.formName}|${c.target}`));
+  const pool = FORMS.flatMap((f, fi) => activeViewports.map((v) => ({ key: `${fi}|${v.label}`, comboKey: `${f.name}|${v.label}`, weight: 1 + Math.min(14, lastDone.get(`${f.name}|${v.label}`) ?? 14) })))
+    .filter((c) => !doneKeys.has(c.comboKey));
+  const submitKeys = new Set<string>();
+  while (submitKeys.size < thisRunQuota && pool.length) {
+    let r = Math.random() * pool.reduce((t, c) => t + c.weight, 0);
+    const idx = pool.findIndex((c) => (r -= c.weight) < 0);
+    submitKeys.add(pool[(idx < 0 ? pool.length - 1 : idx)].key);
+    pool.splice(idx < 0 ? pool.length - 1 : idx, 1);
+  }
+  console.log(`[run] Real submissions: ${doneToday.length}/${DAILY_LEAD_CAP} done today; this run submits ${submitKeys.size}.`);
 
   for (const [formIndex, form] of FORMS.entries()) {
     const formStartTime = Date.now();
     const formResults: TestResult[] = [];
 
     const runViewport = async (viewport: (typeof VIEWPORTS)[number]) => {
-      const shouldSubmit =
-        !alreadySubmittedToday && formIndex === winningFormIndex && viewport.label === winningTarget;
+      const shouldSubmit = submitKeys.has(`${formIndex}|${viewport.label}`);
       let results = await testOneFormDevice(form, viewport, runId, runTimestamp, shouldSubmit);
       // One retry before a revenue-critical failure counts, so one-off blips
       // (slow hydration, network hiccup) don't page anyone. Never retried on
@@ -284,6 +290,7 @@ async function runAllTests(): Promise<RunSummary> {
     runFailureReason: allResults.some((r) => r.status === 'pass') ? undefined : 'No check passed in this run — the browser likely failed to start, so nothing was actually tested.',
     issueDelta: delta,
     includeKnownEvidence,
+    realLeads: { thisRun: submitKeys.size, today: doneToday.length + submitKeys.size, cap: DAILY_LEAD_CAP },
     timingBaselineMs,
     urgentScreenshots,
     dbWriteFailed: !dbOutcome.ok,

@@ -181,7 +181,7 @@ export async function runFunctionalChecks(ctx: FunctionalCheckContext): Promise<
         })
       );
     } else if (!ctx.shouldSubmit) {
-      // At most 1 real submission per calendar day, across all forms and
+      // At most DAILY_LEAD_CAP real submissions per calendar day, across all forms and
       // devices combined — see run.ts's hasSubmittedToday()/winning-form
       // selection. This device still gets fields filled and the submit
       // button located above, confirming the submission path is reachable,
@@ -190,7 +190,7 @@ export async function runFunctionalChecks(ctx: FunctionalCheckContext): Promise<
         baseResult(ctx, {
           status: 'pass',
           description:
-            'Submit button located and form filled — submission skipped (not today\'s single randomly-selected submission slot).',
+            'Submit button located and form filled — submission skipped (not one of today\'s randomly-selected submission slots).',
         })
       );
     } else {
