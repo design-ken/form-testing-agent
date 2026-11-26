@@ -132,7 +132,42 @@ jobs:
           if [ -f db/test-runs.sqlite ]; then
             git add db/test-runs.sqlite docs/data.json
             git diff --cached --quiet -- db/test-runs.sqlite docs/data.json || git commit -m "Update test-runs.sqlite and dashboard data [skip ci]"
-            git push
+            # Another push to main (e.g. a code change) can land while a run is in flight: rebase and retry.
+            pushed=0
+            for attempt in 1 2 3; do
+              if git push; then pushed=1; break; fi
+              echo "Push rejected (attempt $attempt); rebasing onto origin/main and retrying"
+              git pull --rebase origin main || { git rebase --abort 2>/dev/null; sleep 5; }
+            done
+            [ "$pushed" = "1" ] || { echo "Could not push results after 3 attempts"; exit 1; }
+          else
+            echo "db/test-runs.sqlite does not exist — skipping dashboard export."
+          fi
+
+      # The SQLite file is the durable result store (see src/db.ts) — commit
+      # it back to the repo so history persists across runs, along with the
+      # dashboard's regenerated data.json (same commit, so the two never
+      # drift apart in git history). Runs even if the test step
+      # failed/errored, since insertResults() still writes whatever rows it
+      # collected before any failure. Guarded with an existence check: if
+      # the process crashed hard (e.g. segfault) before ever reaching
+      # insertResults(), the file may not exist yet — `git add` on a
+      # nonexistent path fails the whole step otherwise (confirmed live).
+      - name: Commit updated test results database
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f db/test-runs.sqlite ]; then
+            git add db/test-runs.sqlite docs/data.json
+            git diff --cached --quiet -- db/test-runs.sqlite docs/data.json || git commit -m "Update test-runs.sqlite and dashboard data [skip ci]"
+            # Another push to main (e.g. a code change) can land while a run is in flight: rebase and retry.
+            for attempt in 1 2 3; do
+              if git push; then break; fi
+              echo "Push rejected (attempt $attempt); rebasing onto origin/main and retrying"
+              git pull --rebase origin main || { git rebase --abort 2>/dev/null; sleep 5; }
+            done
+            git push --dry-run >/dev/null 2>&1 || true
           else
             echo "db/test-runs.sqlite does not exist — test:forms likely crashed before writing any results. Nothing to commit."
           fi

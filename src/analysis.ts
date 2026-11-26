@@ -58,7 +58,8 @@ export function computeDelta(db: Database.Database, current: TestResult[]): { de
     const seen = new Set<string>();
     for (const r of prevRows) {
       const k = fingerprint(r.form_name, r.category, r.description);
-      if (nowKeys.has(k) || seen.has(k)) continue;
+      // A real-submission check only exists in runs that drew a submission slot, so its absence isn't a fix.
+      if (nowKeys.has(k) || seen.has(k) || r.description.startsWith('Valid submission')) continue;
       seen.add(k);
       fixed.push({ formName: r.form_name, category: r.category as Category, description: r.description, severity: r.severity as Severity | null });
     }
