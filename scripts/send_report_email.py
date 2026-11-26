@@ -128,7 +128,8 @@ def lead_line(summary):
         return f"No real test leads in this run{today}."
     ok = sum(1 for r in rs if r.get("status") == "pass")
     detail = "; ".join(f"{r.get('formName')} / {r.get('target') or r.get('device')} " + ("\u2714" if r.get("status") == "pass" else "\u2718 no confirmation") for r in rs)
-    return f"Real test leads this run: {len(rs)} ({ok} confirmed){today} \u2014 {detail}"
+    note = " See the Notion page for a screenshot of what each page showed right after submitting." if any(r.get("status") != "pass" for r in rs) else ""
+    return f"Real test leads this run: {len(rs)} ({ok} confirmed){today} \u2014 {detail}.{note}"
 
 
 def timing_table(summary, urgent):

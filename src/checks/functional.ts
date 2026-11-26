@@ -1,5 +1,7 @@
+import path from 'node:path';
+import { mkdir } from 'node:fs/promises';
 import type { Page } from 'playwright';
-import type { TestResult, FormDef, Device } from '../types.js';
+import type { TestResult, FormDef, Device, Evidence } from '../types.js';
 import { TEST_IDENTITY } from '../forms.js';
 import { findSubmitButton } from './submitButton.js';
 
@@ -14,6 +16,31 @@ interface FunctionalCheckContext {
   runId: string;
   runTimestamp: string;
   shouldSubmit: boolean;
+}
+
+/**
+ * What the page looks like right after a real submission: a viewport screenshot plus the text of any
+ * alert/status/dialog/toast and the final URL. Lets a reader of the report judge whether the form
+ * really confirmed — independent of whether our confirmation matcher recognised it.
+ */
+async function capturePostSubmit(page: Page, formId: string, urlAfter: string): Promise<Evidence[]> {
+  try {
+    const dir = path.resolve(process.cwd(), 'screenshots', 'evidence');
+    await mkdir(dir, { recursive: true });
+    const file = path.join(dir, `submit-${formId}-${Date.now()}.png`);
+    await page.screenshot({ path: file, timeout: 8000 });
+    const text = await page
+      .evaluate(() =>
+        Array.from(document.querySelectorAll('[role=alert],[role=status],[role=dialog],[aria-live],[class*=toast],[class*=Toast],[class*=success],[class*=error]'))
+          .map((e) => (e as HTMLElement).innerText?.trim())
+          .filter(Boolean)
+          .join(' | ')
+      )
+      .catch(() => '');
+    return [{ path: file, selector: `URL after submit: ${urlAfter}`, html: text.replace(/\s+/g, ' ').slice(0, 220) || 'no alert/status/dialog text on the page' }];
+  } catch {
+    return [];
+  }
 }
 
 function baseResult(ctx: FunctionalCheckContext, overrides: Partial<TestResult>): TestResult {
@@ -216,9 +243,12 @@ export async function runFunctionalChecks(ctx: FunctionalCheckContext): Promise<
       // Accept EITHER an inline success message OR a URL/route change as valid
       // confirmation, per the Track B spec ("success message and/or redirect,
       // whichever this form uses") — do not hardcode a single pattern.
+      const postSubmit = await capturePostSubmit(page, ctx.form.id, urlAfter);
+
       if (successTextVisible || urlAfter !== urlBefore) {
         results.push(
           baseResult(ctx, {
+            evidence: postSubmit.length ? postSubmit : undefined,
             status: 'pass',
             description: successTextVisible
               ? 'Valid submission showed an inline confirmation message.'
@@ -228,6 +258,7 @@ export async function runFunctionalChecks(ctx: FunctionalCheckContext): Promise<
       } else {
         results.push(
           baseResult(ctx, {
+            evidence: postSubmit.length ? postSubmit : undefined,
             status: 'fail',
             severity: 'high',
             description:

@@ -249,12 +249,27 @@ async function buildPageContent(summary: RunSummary): Promise<NotionBlock[]> {
   blocks.push(callout(v.icon, `${v.headline[0].toUpperCase()}${v.headline.slice(1)} · ${delta?.newCount ?? 0} new · ${delta?.knownCount ?? 0} known · ${delta?.fixed.length ?? 0} fixed`, color));
   blocks.push(paragraph(`${realLeadText(summary)} ${summary.totalPass} checks passed across ${new Set(summary.results.map((r) => r.target ?? r.device)).size} devices/browsers (emulated, not physical devices).`));
 
+  // Every real submission this run, with what the page actually showed afterwards.
+  const leads = summary.results.filter((x) => x.description.startsWith('Valid submission'));
+  if (leads.length) {
+    blocks.push(heading2('Real test leads this run'));
+    for (const x of leads) {
+      const ok = x.status === 'pass';
+      const ev = x.evidence?.[0];
+      blocks.push(bullet(`${ok ? '✔ Confirmed' : '✖ No confirmation detected'} — ${x.formName} / ${x.target ?? x.device}${ev ? `. ${ev.selector}. Page text: ${ev.html}` : ''}`));
+      if (ev) {
+        const img = await imageBlock(ev, `${x.formName} / ${x.target ?? x.device} — page right after submit`);
+        if (img) blocks.push(img);
+      }
+    }
+  }
+
   const urgent = issues.filter((i) => i.urgent);
   if (urgent.length) {
     blocks.push(heading2('🔴 Needs action now'));
     for (const i of urgent) {
       const shot = summary.results.find((x) => x.formName === i.formName && (x.target ?? x.device) === i.affectedDevices[0] && x.screenshotPath)?.screenshotPath ?? undefined;
-      blocks.push(...(await issueBlocks(i, true, shot)));
+      blocks.push(...(await issueBlocks(i, !i.description.startsWith('Valid submission'), shot)));
     }
   }
 
