@@ -98,7 +98,8 @@ function ruleOf(issue: ConsolidatedIssue): { label: string; fix?: string } {
 function realLeadOf(summary: RunSummary): string {
   const rs = summary.results.filter((x) => x.description.startsWith('Valid submission'));
   if (!rs.length) return 'Not today';
-  return rs.every((x) => x.status === 'pass') ? 'Submitted ✔' : 'No confirmation ✖';
+  if (rs.every((x) => x.status === 'pass')) return 'Submitted ✔';
+  return rs.some((x) => x.status === 'fail') ? 'No confirmation ✖' : 'Blocked ⚠';
 }
 
 function realLeadText(summary: RunSummary): string {
@@ -106,7 +107,7 @@ function realLeadText(summary: RunSummary): string {
   const l = summary.realLeads;
   if (!rs.length) return `Real test leads: none this run${l ? ` (${l.today} of ${l.cap} done today)` : ''}.`;
   const ok = rs.filter((x) => x.status === 'pass').length;
-  const detail = rs.map((x) => `${x.formName} / ${x.target ?? x.device} ${x.status === 'pass' ? '✔' : '✖ no confirmation'}`).join('; ');
+  const detail = rs.map((x) => `${x.formName} / ${x.target ?? x.device} ${x.status === 'pass' ? '✔' : x.status === 'at_risk' ? '⚠ blocked by validation' : '✖ no confirmation'}`).join('; ');
   return `Real test leads this run: ${rs.length} (${ok} confirmed)${l ? `, ${l.today} of ${l.cap} today` : ''} — ${detail}.`;
 }
 
@@ -256,7 +257,7 @@ async function buildPageContent(summary: RunSummary): Promise<NotionBlock[]> {
     for (const x of leads) {
       const ok = x.status === 'pass';
       const ev = x.evidence?.[0];
-      blocks.push(bullet(`${ok ? '✔ Confirmed' : '✖ No confirmation detected'} — ${x.formName} / ${x.target ?? x.device}${ev ? `. ${ev.selector}. Page text: ${ev.html}` : ''}`));
+      blocks.push(bullet(`${ok ? '✔ Confirmed' : x.status === 'at_risk' ? '⚠ Blocked by form validation (no lead created)' : '✖ No confirmation detected'} — ${x.formName} / ${x.target ?? x.device}${ev ? `. ${ev.selector}. Page text: ${ev.html}` : ''}`));
       if (ev) {
         const img = await imageBlock(ev, `${x.formName} / ${x.target ?? x.device} — page right after submit`);
         if (img) blocks.push(img);

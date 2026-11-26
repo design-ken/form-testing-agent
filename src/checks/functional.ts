@@ -244,6 +244,7 @@ export async function runFunctionalChecks(ctx: FunctionalCheckContext): Promise<
       // confirmation, per the Track B spec ("success message and/or redirect,
       // whichever this form uses") — do not hardcode a single pattern.
       const postSubmit = await capturePostSubmit(page, ctx.form.id, urlAfter);
+      let blockedText: string | null = null;
 
       if (successTextVisible || urlAfter !== urlBefore) {
         results.push(
@@ -253,6 +254,28 @@ export async function runFunctionalChecks(ctx: FunctionalCheckContext): Promise<
             description: successTextVisible
               ? 'Valid submission showed an inline confirmation message.'
               : 'Valid submission triggered a redirect/URL change (treated as confirmation).',
+          })
+        );
+      } else if (
+        // The form refused to submit and says why (e.g. "Please verify your email first", "Select at least one
+        // service"). That is client-side validation, not a silently dropped lead: nothing was sent.
+        await (async () => {
+          blockedText = await page
+            .locator('text=/verify your email|select at least one|is required|please (select|enter|fill|verify)|step [2-9] of \\d/i')
+            .first()
+            .innerText({ timeout: 1500 })
+            .catch(() => null);
+          return !!blockedText;
+        })()
+      ) {
+        results.push(
+          baseResult(ctx, {
+            evidence: postSubmit.length ? postSubmit : undefined,
+            status: 'at_risk',
+            severity: 'medium',
+            description: /^step \d of \d/i.test(String(blockedText).trim())
+              ? `Valid submission only advanced a multi-step form ("${String(blockedText).trim()}") — the automated test does not complete the later steps, so no lead was created and the final submit is NOT being tested here.`
+              : `Valid submission was blocked by the form's own validation ("${String(blockedText).trim().slice(0, 80)}") — the automated test cannot complete this step, so no lead was created and the real submit path is NOT being tested here.`,
           })
         );
       } else {

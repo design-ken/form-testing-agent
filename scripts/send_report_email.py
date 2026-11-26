@@ -127,7 +127,7 @@ def lead_line(summary):
     if not rs:
         return f"No real test leads in this run{today}."
     ok = sum(1 for r in rs if r.get("status") == "pass")
-    detail = "; ".join(f"{r.get('formName')} / {r.get('target') or r.get('device')} " + ("\u2714" if r.get("status") == "pass" else "\u2718 no confirmation") for r in rs)
+    detail = "; ".join(f"{r.get('formName')} / {r.get('target') or r.get('device')} " + ("\u2714" if r.get("status") == "pass" else "\u26a0 blocked by form validation" if r.get("status") == "at_risk" else "\u2718 no confirmation") for r in rs)
     note = " See the Notion page for a screenshot of what each page showed right after submitting." if any(r.get("status") != "pass" for r in rs) else ""
     return f"Real test leads this run: {len(rs)} ({ok} confirmed){today} \u2014 {detail}.{note}"
 
