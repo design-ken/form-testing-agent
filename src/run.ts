@@ -155,7 +155,7 @@ async function runAllTests(): Promise<RunSummary> {
   const runId = uuidv4();
   const runTimestamp = new Date().toISOString();
   const allResults: TestResult[] = [];
-  const formMetrics = new Map<string, { startTime: number; results: TestResult[] }>();
+  const formMetrics = new Map<string, { startTime: number; endTime: number; results: TestResult[] }>();
 
   // Cap: at most 1 real ("Valid submission...") lead per calendar day (IST),
   // across ALL forms combined — not per form, not per run. Whichever
@@ -196,7 +196,7 @@ async function runAllTests(): Promise<RunSummary> {
       formResults.push(...results);
     }
 
-    formMetrics.set(form.name, { startTime: formStartTime, results: formResults });
+    formMetrics.set(form.name, { startTime: formStartTime, endTime: Date.now(), results: formResults });
   }
 
   // History comparisons must run BEFORE this run is written, so "known"
@@ -210,9 +210,9 @@ async function runAllTests(): Promise<RunSummary> {
   const dbOutcome = insertResults(allResults);
 
   // Build per-form timing metrics
-  const timing = Array.from(formMetrics.entries()).map(([formName, { startTime }]) => ({
+  const timing = Array.from(formMetrics.entries()).map(([formName, { startTime, endTime }]) => ({
     formName,
-    durationMs: Date.now() - startTime,
+    durationMs: endTime - startTime, // this form's own time (it used to be measured after ALL forms finished)
   }));
   insertTimings(runId, runTimestamp, timing);
 

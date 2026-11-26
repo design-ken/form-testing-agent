@@ -130,7 +130,7 @@ export function insertTimings(runId: string, runTimestamp: string, metrics: { fo
 
 // Test time per form roughly doubled when the 5-target device/browser matrix
 // replaced the 3 resized windows; only compare against runs from the new matrix.
-const MATRIX_CUTOVER = '2026-11-25T13:00:00';
+const MATRIX_CUTOVER = '2026-11-26T01:00:00';
 
 /** Average per-form duration over the last 7 days (excludes the run being written). */
 export function getTimingBaseline(): Record<string, number> {

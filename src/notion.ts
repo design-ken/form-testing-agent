@@ -89,7 +89,9 @@ const RULES: Record<string, { label: string; fix: string }> = {
 function ruleOf(issue: ConsolidatedIssue): { label: string; fix?: string } {
   const id = issue.ruleId ?? /^\[axe-core\]\s*([\w-]+)/.exec(issue.description)?.[1];
   if (id && RULES[id]) return RULES[id];
-  return { label: issue.description.replace(/^\[axe-core\]\s*/, '').replace(/\s*\(\d+ element\(s\) affected\)/, '').slice(0, 110) };
+  if (/no visible confirmation/i.test(issue.description)) return { label: 'Submit gave no confirmation (possible silent failure)', fix: 'Check the form manually and the CRM for the test lead; the page screenshot below shows the state after submit.' };
+  const d = issue.description.replace(/^\[axe-core\]\s*/, '').replace(/\s*\(\d+ element\(s\) affected\)/, '').replace(/\s*\(confirmed on retry\)/, '');
+  return { label: d.length > 90 ? d.slice(0, d.lastIndexOf(' ', 90)) + '…' : d };
 }
 
 function realLeadOf(summary: RunSummary): string {
@@ -188,16 +190,18 @@ async function imageBlock(ev: Evidence, caption: string): Promise<NotionBlock | 
   }
 }
 
-async function issueBlocks(issue: ConsolidatedIssue, withEvidence: boolean): Promise<NotionBlock[]> {
+async function issueBlocks(issue: ConsolidatedIssue, withEvidence: boolean, pageShot?: string): Promise<NotionBlock[]> {
   const r = ruleOf(issue);
   const sev = issue.severity ? ` [${issue.severity.toUpperCase()}]` : '';
   const blocks: NotionBlock[] = [heading3(`${STATUS_ICON[issue.status === 'fail' ? 'fail' : 'at_risk']} ${r.label} — ${issue.formName}${sev}`)];
   blocks.push(bullet(`Seen on: ${issue.affectedDevices.length >= 5 ? 'all 5 targets' : issue.affectedDevices.join(', ')}`));
   if (r.fix) blocks.push(bullet(`Fix: ${r.fix}`));
-  if (issue.urgent) blocks.push(bullet(issue.description));
+  if (issue.urgent) blocks.push(bullet(`Details: ${issue.description}${issue.confirmedOnRetry ? '' : ''}`));
   if (withEvidence) {
-    for (const ev of (issue.evidence ?? []).slice(0, 2)) {
-      const img = await imageBlock(ev, `${issue.formName} · ${ev.selector}${ev.html ? ' — ' + ev.html : ''}`);
+    const evs: Evidence[] = (issue.evidence ?? []).slice(0, 2);
+    if (!evs.length && issue.urgent && pageShot) evs.push({ path: pageShot, selector: '', html: '' });
+    for (const ev of evs) {
+      const img = await imageBlock(ev, `${issue.formName} — ${r.label}${ev.html ? ' · ' + ev.html.slice(0, 100) : ''}`);
       if (img) blocks.push(img);
     }
   }
@@ -238,7 +242,10 @@ async function buildPageContent(summary: RunSummary): Promise<NotionBlock[]> {
   const urgent = issues.filter((i) => i.urgent);
   if (urgent.length) {
     blocks.push(heading2('🔴 Needs action now'));
-    for (const i of urgent) blocks.push(...(await issueBlocks(i, true)));
+    for (const i of urgent) {
+      const shot = summary.results.find((x) => x.formName === i.formName && (x.target ?? x.device) === i.affectedDevices[0] && x.screenshotPath)?.screenshotPath ?? undefined;
+      blocks.push(...(await issueBlocks(i, true, shot)));
+    }
   }
 
   const fresh = issues.filter((i) => i.isNew && !i.urgent);
@@ -280,7 +287,7 @@ async function buildPageContent(summary: RunSummary): Promise<NotionBlock[]> {
       if (summary.includeKnownEvidence) {
         for (const issue of g.forms.values()) {
           const ev = issue.evidence?.[0];
-          if (ev) { const img = await imageBlock(ev, `${issue.formName} · ${ev.selector}`); if (img) children.push(img); }
+          if (ev) { const img = await imageBlock(ev, `${issue.formName} — ${g.label}${ev.html ? ' · ' + ev.html.slice(0, 100) : ''}`); if (img) children.push(img); }
         }
       }
     }
