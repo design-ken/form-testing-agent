@@ -22,6 +22,12 @@ on:
   # freshly reading the workflow file) over repeated manual dispatch clicks.
   workflow_dispatch: {}
 
+# Runs queue instead of overlapping: two runs (e.g. a manual one during a scheduled one) both
+# write db/test-runs.sqlite, and the second push was being rejected.
+concurrency:
+  group: run-tests
+  cancel-in-progress: false
+
 jobs:
   test:
     # Pinned: ubuntu-latest migrated to 26.04, which Playwright 1.55.1 cannot install
