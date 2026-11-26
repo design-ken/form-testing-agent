@@ -34,7 +34,7 @@ jobs:
     # Chromium on (confirmed 2026-11-16: every run failed with "does not support chromium
     # on ubuntu26.04-x64"). Revisit when upgrading Playwright.
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: write   # needed to commit the updated sqlite file back
     steps:
@@ -54,7 +54,7 @@ jobs:
         run: |
           ok=0
           for attempt in 1 2 3; do
-            if npx playwright install --with-deps chromium webkit firefox; then ok=1; break; fi
+            if npx playwright install --with-deps chromium webkit firefox msedge; then ok=1; break; fi
             echo "Attempt $attempt failed, retrying in 10s..."
             sleep 10
           done

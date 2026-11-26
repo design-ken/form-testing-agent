@@ -24,24 +24,29 @@ Three times a day (5:30 AM, 1:30 PM, and 8:30 PM IST), a GitHub Actions runner:
 
 ## Devices & Browsers
 
-Each form is tested on 5 targets, defined in `src/forms.ts` (`VIEWPORTS`):
+Each form is tested on 10 targets, defined in `src/forms.ts` (`VIEWPORTS`) and weighted to the GA4 mix (desktop ~92% of users; Chrome ~88%, Edge ~4.6%, Safari ~4.2%, Firefox ~0.8%):
 
 | Target | Engine | How it's emulated |
 |---|---|---|
-| Desktop · Chrome | Chromium | 1440×900 window |
-| Desktop · Firefox | Firefox | 1440×900 window |
-| iPad · Safari | WebKit | Playwright device profile `iPad (gen 7)` — real iPad user agent, touch, 2× pixel density, 810×1080 |
-| iPhone 15 · Safari | WebKit | profile `iPhone 15` — iOS user agent, touch, 3× density, 393×659 |
-| Pixel 7 · Chrome | Chromium | profile `Pixel 7` — Android user agent, touch, 2.625× density, 412×839 |
+| Desktop · Chrome | Chromium | 1440×900 window (main desktop) |
+| Desktop · Chrome 1920×1080 | Chromium | full-HD monitor |
+| Laptop · Chrome 1366×768 | Chromium | small laptop |
+| Desktop · Edge | real Microsoft Edge (`msedge` channel) | 1440×900 |
+| Desktop · Safari (Mac) | WebKit | profile `Desktop Safari`, 1280×720 |
+| Desktop · Firefox | Firefox | 1440×900 |
+| iPad · Safari | WebKit | profile `iPad (gen 7)` — touch, 2× density, 810×1080 |
+| iPhone 15 · Safari | WebKit | profile `iPhone 15` — iOS UA, touch, 3×, 393×659 |
+| iPhone SE · Safari (small) | WebKit | profile `iPhone SE` — smallest common phone, 320×568 |
+| Pixel 7 · Chrome | Chromium | profile `Pixel 7` — Android UA, touch, 412×839 |
 
 - The DB's `device` column keeps the class (`desktop`/`tablet`/`mobile`, so history stays comparable and class-specific layout checks still apply); the new `target` column holds the label shown in reports.
 - The axe accessibility scan runs on Desktop·Chrome, iPad and iPhone only (`a11y: true`) — its findings are mostly viewport-agnostic, so scanning every target would just duplicate them.
 - **Limits:** this is emulation on Linux CI, not physical devices. Playwright cannot emulate the on-screen keyboard, so "keyboard covers the submit button" stays a manual check (flagged as at-risk). Real-device quirks (iOS Safari specifics beyond the WebKit engine, OEM browsers) are not covered.
-- Add or change a target by editing `VIEWPORTS`; any key of `playwright.devices` works as `profile`. The workflow installs `chromium webkit firefox`.
+- Add or change a target by editing `VIEWPORTS`; any key of `playwright.devices` works as `profile`. The workflow installs `chromium webkit firefox msedge`. Two targets run in parallel (`TARGET_CONCURRENCY`), so a 10-target run takes ~12 minutes (hard stop 35 min, workflow limit 45).
 
 ## Reports (what you receive)
 
-- **Per-run email** (every run): headline is **All clear / New issues / URGENT / RUN FAILED**. *Urgent* = a form cannot load or submit (functional/availability failure); a failure is retried once before it counts (never on the real-submission slot) and is marked "confirmed on retry". The email lists urgent issues (page screenshot attached), issues **new** this run, how many **known** issues are unchanged (not repeated), what was **fixed** since the last run, and test time per form vs its 7-day average (compared only against runs on the current 5-target matrix). "New" = not seen in any run in the last 14 days (`src/analysis.ts`; issue identity ignores axe's element counts).
+- **Per-run email** (every run): headline is **All clear / New issues / URGENT / RUN FAILED**. *Urgent* = a form cannot load or submit (functional/availability failure); a failure is retried once before it counts (never on the real-submission slot) and is marked "confirmed on retry". The email lists urgent issues (page screenshot attached), issues **new** this run, how many **known** issues are unchanged (not repeated), what was **fixed** since the last run, and test time per form vs its 7-day average (compared only against runs on the current 10-target matrix). "New" = not seen in any run in the last 14 days (`src/analysis.ts`; issue identity ignores axe's element counts).
 - **Weekly accessibility digest** (Mondays 9:00 AM IST, `weekly-digest.yml` → `src/weekly-digest.ts`): open-issue trend over 5 weeks, the top issues grouped by rule with a plain-language fix, and what was fixed this week. For the design backlog.
 - **Watchdog** (9:30 AM and 10:30 PM IST, `watchdog.yml` → `src/watchdog.ts`): emails only if no run has finished in 11 hours, the latest run had 0 passing checks, or (after 10 PM IST) the day's one real lead never happened. Covers the "GitHub silently skipped/disabled the schedule" blind spot.
 - **Notion**: each run page starts with a "What changed" section (new / known / fixed, urgent failures).

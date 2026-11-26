@@ -6,7 +6,7 @@ export type Status = 'pass' | 'fail' | 'at_risk' | 'error';
 
 export type Severity = 'low' | 'medium' | 'high';
 
-export type BrowserName = 'chromium' | 'webkit' | 'firefox';
+export type BrowserName = 'chromium' | 'msedge' | 'webkit' | 'firefox';
 
 /**
  * One test target: a device CLASS (drives class-specific checks and keeps the

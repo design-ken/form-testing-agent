@@ -29,10 +29,16 @@ export const FORMS: FormDef[] = [
 // Caveat: Playwright cannot emulate the on-screen keyboard, so "keyboard hides
 // the submit button" remains a manual check.
 export const VIEWPORTS: Viewport[] = [
+  // Weighted to the GA4 mix (desktop ~92% of users; Chrome ~88%, Edge ~4.6%, Safari ~4.2%, Firefox ~0.8%).
   { device: 'desktop', label: 'Desktop · Chrome', browser: 'chromium', width: 1440, height: 900, a11y: true },
+  { device: 'desktop', label: 'Desktop · Chrome 1920×1080', browser: 'chromium', width: 1920, height: 1080, a11y: false },
+  { device: 'desktop', label: 'Laptop · Chrome 1366×768', browser: 'chromium', width: 1366, height: 768, a11y: false },
+  { device: 'desktop', label: 'Desktop · Edge', browser: 'msedge', width: 1440, height: 900, a11y: false },
+  { device: 'desktop', label: 'Desktop · Safari (Mac)', browser: 'webkit', profile: 'Desktop Safari', width: 1280, height: 720, a11y: false },
   { device: 'desktop', label: 'Desktop · Firefox', browser: 'firefox', width: 1440, height: 900, a11y: false },
   { device: 'tablet', label: 'iPad · Safari', browser: 'webkit', profile: 'iPad (gen 7)', width: 810, height: 1080, a11y: true },
   { device: 'mobile', label: 'iPhone 15 · Safari', browser: 'webkit', profile: 'iPhone 15', width: 393, height: 659, a11y: true },
+  { device: 'mobile', label: 'iPhone SE · Safari (small)', browser: 'webkit', profile: 'iPhone SE', width: 320, height: 568, a11y: false },
   { device: 'mobile', label: 'Pixel 7 · Chrome', browser: 'chromium', profile: 'Pixel 7', width: 412, height: 839, a11y: false },
 ];
 

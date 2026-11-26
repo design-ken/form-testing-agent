@@ -1,4 +1,5 @@
 import { Client } from '@notionhq/client';
+import { VIEWPORTS } from './forms.js';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { RunSummary, TestResult, ConsolidatedIssue, Evidence } from './types.js';
@@ -194,7 +195,7 @@ async function issueBlocks(issue: ConsolidatedIssue, withEvidence: boolean, page
   const r = ruleOf(issue);
   const sev = issue.severity ? ` [${issue.severity.toUpperCase()}]` : '';
   const blocks: NotionBlock[] = [heading3(`${STATUS_ICON[issue.status === 'fail' ? 'fail' : 'at_risk']} ${r.label} — ${issue.formName}${sev}`)];
-  blocks.push(bullet(`Seen on: ${issue.affectedDevices.length >= 5 ? 'all 5 targets' : issue.affectedDevices.join(', ')}`));
+  blocks.push(bullet(`Seen on: ${issue.affectedDevices.join(', ')}`));
   if (r.fix) blocks.push(bullet(`Fix: ${r.fix}`));
   if (issue.urgent) blocks.push(bullet(`Details: ${issue.description}${issue.confirmedOnRetry ? '' : ''}`));
   if (withEvidence) {
@@ -209,7 +210,7 @@ async function issueBlocks(issue: ConsolidatedIssue, withEvidence: boolean, page
 }
 
 function coverageTable(summary: RunSummary): NotionBlock {
-  const order = ['Desktop · Chrome', 'Desktop · Firefox', 'iPad · Safari', 'iPhone 15 · Safari', 'Pixel 7 · Chrome'];
+  const order = VIEWPORTS.map((v) => v.label);
   const counts = new Map<string, { pass: number; risk: number; bad: number }>();
   for (const r of summary.results) {
     const t = r.target ?? r.device;

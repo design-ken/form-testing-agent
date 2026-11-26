@@ -153,10 +153,15 @@ def timing_table(summary, urgent):
 
 
 TARGET_ORDER = [
-    ("Desktop \u00b7 Chrome", "Windows/Mac laptop, 1440\u00d7900"),
-    ("Desktop \u00b7 Firefox", "Windows/Mac laptop, 1440\u00d7900"),
+    ("Desktop \u00b7 Chrome", "Chrome, 1440\u00d7900 (main desktop)"),
+    ("Desktop \u00b7 Chrome 1920\u00d71080", "Chrome, full-HD monitor"),
+    ("Laptop \u00b7 Chrome 1366\u00d7768", "Chrome, small laptop"),
+    ("Desktop \u00b7 Edge", "Microsoft Edge, 1440\u00d7900"),
+    ("Desktop \u00b7 Safari (Mac)", "Safari engine on Mac, 1280\u00d7720"),
+    ("Desktop \u00b7 Firefox", "Firefox, 1440\u00d7900"),
     ("iPad \u00b7 Safari", "iPad (gen 7), Safari engine, 810\u00d71080, touch"),
     ("iPhone 15 \u00b7 Safari", "iPhone 15, Safari engine, 393\u00d7659, touch"),
+    ("iPhone SE \u00b7 Safari (small)", "iPhone SE, small phone 320\u00d7568, touch"),
     ("Pixel 7 \u00b7 Chrome", "Pixel 7, Chrome, 412\u00d7839, touch"),
 ]
 
@@ -217,7 +222,7 @@ def failing_html(summary):
     for (cat, label), g in sorted(groups.items(), key=lambda kv: -len(kv[1]["forms"]) * len(kv[1]["targets"])):
         forms = [f for f in FORMS if f in g["forms"]] + sorted(g["forms"] - set(FORMS), key=str)
         tg = sorted(g["targets"], key=str)
-        tlabel = "all 5 targets" if len(tg) == 5 else ", ".join(tg)
+        tlabel = "all targets" if len(tg) >= len(TARGET_ORDER) else ", ".join(tg)
         rows += f"""<tr>
           <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid #e2e8f0;"><b>{esc(label)}</b><div style="font-size:11px;color:#64748b;">{esc(cat)}</div></td>
           <td style="padding:7px 10px;font-size:12px;border-bottom:1px solid #e2e8f0;">{esc(", ".join(str(f) for f in forms))}</td>

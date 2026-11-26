@@ -14,7 +14,8 @@ import type { TestResult, RunSummary } from './types.js';
 
 const REQUIRED_ENV_VARS = ['NOTION_TOKEN', 'NOTION_DATABASE_ID'];
 const SCREENSHOT_DIR = path.resolve(process.cwd(), 'screenshots');
-const OVERALL_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes, per the plan's hard timeout mitigation
+const OVERALL_TIMEOUT_MS = 35 * 60 * 1000; // hard stop; a 10-target run takes ~12 min with 2 targets in parallel
+const TARGET_CONCURRENCY = 2;
 
 function validateEnv(): void {
   const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
@@ -27,11 +28,14 @@ function validateEnv(): void {
 // used to sit outside the per-combination try/catch, so a single failed launch
 // killed the whole run in under a second with no error logged. Retry once, and
 // let any remaining failure become a normal per-form/device error row.
-const ENGINES: Record<string, BrowserType> = { chromium, firefox, webkit };
+const ENGINES: Record<string, BrowserType> = { chromium, msedge: chromium, firefox, webkit };
 
 async function launchBrowser(name: string): Promise<Browser> {
   // The sandbox/gpu flags are Chromium-specific (see note below); Firefox/WebKit reject them.
-  const opts = name === 'chromium' ? { headless: true, args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu'] } : { headless: true };
+  const chromiumLike = name === 'chromium' || name === 'msedge';
+  const opts = chromiumLike
+    ? { headless: true, args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu'], ...(name === 'msedge' ? { channel: 'msedge' } : {}) }
+    : { headless: true };
   try {
     return await ENGINES[name].launch(opts);
   } catch (err) {
@@ -176,7 +180,7 @@ async function runAllTests(): Promise<RunSummary> {
     const formStartTime = Date.now();
     const formResults: TestResult[] = [];
 
-    for (const viewport of VIEWPORTS) {
+    const runViewport = async (viewport: (typeof VIEWPORTS)[number]) => {
       const shouldSubmit =
         !alreadySubmittedToday && formIndex === winningFormIndex && viewport.label === winningTarget;
       let results = await testOneFormDevice(form, viewport, runId, runTimestamp, shouldSubmit);
@@ -194,7 +198,14 @@ async function runAllTests(): Promise<RunSummary> {
       }
       allResults.push(...results);
       formResults.push(...results);
-    }
+    };
+    // Small worker pool: 2 targets at a time keeps a 10-target run near 12 minutes without starving the runner.
+    const queue = [...VIEWPORTS];
+    await Promise.all(
+      Array.from({ length: TARGET_CONCURRENCY }, async () => {
+        for (let v = queue.shift(); v; v = queue.shift()) await runViewport(v);
+      })
+    );
 
     formMetrics.set(form.name, { startTime: formStartTime, endTime: Date.now(), results: formResults });
   }
@@ -292,7 +303,7 @@ async function main(): Promise<void> {
     summary = await Promise.race([
       runAllTests(),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('Run exceeded 15-minute internal timeout.')), OVERALL_TIMEOUT_MS);
+        timer = setTimeout(() => reject(new Error('Run exceeded 35-minute internal timeout.')), OVERALL_TIMEOUT_MS);
       }),
     ]);
     clearTimeout(timer);
